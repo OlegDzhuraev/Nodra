@@ -17,24 +17,26 @@
  */
 
 using System;
-using UnityEngine;
 
 namespace Nodra
 {
-	/// <summary> Runs its own embedded sub-pipeline from scratch (starting from an empty input, same as the top
-	/// level ProceduralMeshGenerator) and appends the result into the main chain's geometry - approximated here
-	/// as one extra branch since this package doesn't have a visual multi-input graph yet. Point indices in the
-	/// branch's primitives are shifted so they still point at the right (now-merged) points; nothing is welded,
-	/// so coincident points from both sides stay separate. </summary>
+	/// <summary> Appends a second branch's geometry into the first, now that the graph editor can actually wire
+	/// two real inputs into one node - a proper multi-input merge, unlike the embedded-sub-pipeline approximation
+	/// this node used before the graph existed. Nothing is welded, so coincident points from both sides stay
+	/// separate. </summary>
 	[Serializable]
 	public class MergeNode : GeoNode
 	{
-		public GeoNodeList Branches = new ();
+		public override int InputCount => 2;
 
-		public override GeoData Process(GeoData input)
+		public override string GetInputPortName(int index) => index == 0 ? "Base" : "Branch";
+
+		public override GeoData Process(GeoData[] inputs)
 		{
-			var output = input ?? new GeoData();
-			var branchData = Branches.Process(null);
+			var baseData = inputs.Length > 0 ? inputs[0] : null;
+			var branchData = inputs.Length > 1 ? inputs[1] : null;
+
+			var output = baseData ?? new GeoData();
 
 			if (branchData != null)
 				Append(output, branchData);

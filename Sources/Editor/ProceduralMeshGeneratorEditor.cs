@@ -21,8 +21,8 @@ using UnityEngine;
 
 namespace Nodra
 {
-	/// <summary> The Nodes field itself is drawn by GeoNodeListDrawer (registered for the GeoNodeList type) - this
-	/// editor adds the AutoGenerate toggle above it and the Generate/Save buttons below. </summary>
+	/// <summary> The Graph field itself is edited visually in NodraGraphWindow, not in the Inspector - this editor
+	/// just adds the AutoGenerate toggle, the button that opens the graph window, and the Generate/Save buttons. </summary>
 	[CustomEditor(typeof(ProceduralMeshGenerator))]
 	public class ProceduralMeshGeneratorEditor : UnityEditor.Editor
 	{
@@ -30,8 +30,12 @@ namespace Nodra
 		{
 			serializedObject.Update();
 			EditorGUILayout.PropertyField(serializedObject.FindProperty("AutoGenerate"));
-			EditorGUILayout.PropertyField(serializedObject.FindProperty("Nodes"));
 			serializedObject.ApplyModifiedProperties();
+
+			EditorGUILayout.Space();
+
+			if (GUILayout.Button("Open Graph Editor", GUILayout.Height(24f)))
+				NodraGraphWindow.Open((ProceduralMeshGenerator) target);
 
 			EditorGUILayout.Space();
 
@@ -47,7 +51,7 @@ namespace Nodra
 			}
 		}
 
-		// Regenerates first, so the saved asset always matches the pipeline's current settings even if the user
+		// Regenerates first, so the saved asset always matches the graph's current settings even if the user
 		// forgot to click Generate (or has AutoGenerate off) since the last edit. AssetDatabase.CreateAsset is
 		// called directly on that freshly built Mesh rather than a copy of it - the MeshFilter keeps pointing at
 		// the exact object that's now also a project asset, and the next Generate() simply swaps in another
@@ -61,7 +65,7 @@ namespace Nodra
 
 			if (!mesh)
 			{
-				EditorUtility.DisplayDialog("Save Mesh", "Nothing to save - the pipeline produced no mesh.", "OK");
+				EditorUtility.DisplayDialog("Save Mesh", "Nothing to save - the graph produced no mesh.", "OK");
 				return;
 			}
 

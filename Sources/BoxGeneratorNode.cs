@@ -28,6 +28,8 @@ namespace Nodra
 	{
 		public Vector3 Size = Vector3.one;
 
+		public override int InputCount => 0;
+
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();

@@ -70,5 +70,25 @@ namespace Nodra
 		}
 
 		public bool HasAttribute(string name) => attributes.ContainsKey(name);
+
+		/// <summary> Deep-enough copy for graph fan-out: a node whose output feeds more than one downstream node
+		/// must hand each of them an independent GeoData, since several nodes (TransformNode, NoiseDisplaceNode,
+		/// ExtrudeNode, MergeNode's base input...) mutate what they receive in place. </summary>
+		public GeoData Clone()
+		{
+			var clone = new GeoData();
+
+			clone.Points.AddRange(Points);
+			clone.Normals.AddRange(Normals);
+			clone.Uvs.AddRange(Uvs);
+
+			foreach (var primitive in Primitives)
+				clone.Primitives.Add((int[]) primitive.Clone());
+
+			foreach (var pair in attributes)
+				clone.attributes[pair.Key] = new List<float>(pair.Value);
+
+			return clone;
+		}
 	}
 }
