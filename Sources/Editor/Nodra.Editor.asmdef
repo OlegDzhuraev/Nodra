@@ -1,0 +1,18 @@
+{
+    "name": "Nodra.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:aa71b7950197c35f9ba4c63e44c99427"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
