@@ -4,6 +4,8 @@
 
 # Nodra
 
+**[Watch the demo on YouTube](https://www.youtube.com/watch?v=BM-pM-0AHjk)**
+
 A simplified, code-first node network for generating meshes in Unity, in the Editor or at runtime - edited as a
 visual node graph.
 
