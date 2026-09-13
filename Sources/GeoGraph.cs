@@ -31,6 +31,7 @@ namespace Nodra
 	{
 		[SerializeReference] public List<GeoNode> Nodes = new ();
 		public List<GeoEdge> Edges = new ();
+		public List<GeoGroup> Groups = new ();
 
 		/// <summary> Which node's output becomes the final mesh. Empty/stale means "figure it out" - see
 		/// FindDefaultOutput - so a freshly-built linear chain works without the user ever touching this. </summary>
