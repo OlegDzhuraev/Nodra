@@ -31,7 +31,7 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public float Radius = 1f;
+		[Min(0f)] public float Radius = 1f;
 		[Range(0, 6)] public int Subdivisions = 2;
 
 		public override int InputCount => 0;
@@ -45,6 +45,9 @@ namespace Nodra
 			for (var i = 0; i < Subdivisions; i++)
 				triangles = Subdivide(points, triangles);
 
+			// [Min] only constrains the Inspector - see SphereGeneratorNode for why a negative Radius (a point
+			// reflection through the origin) still needs clamping here too, to avoid inverting this shape's winding.
+			var radius = Mathf.Max(0f, Radius);
 			var startIndex = data.PointCount;
 
 			foreach (var point in points)
@@ -53,7 +56,7 @@ namespace Nodra
 				var u = Mathf.Atan2(direction.z, direction.x) / (Mathf.PI * 2f) + 0.5f;
 				var v = Mathf.Asin(Mathf.Clamp(direction.y, -1f, 1f)) / Mathf.PI + 0.5f;
 
-				data.AddPoint(direction * Radius, direction, new Vector2(u, v));
+				data.AddPoint(direction * radius, direction, new Vector2(u, v));
 			}
 
 			foreach (var triangle in triangles)

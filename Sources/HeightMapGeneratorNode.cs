@@ -31,7 +31,7 @@ namespace Nodra
 		public override string Category => "Generators";
 
 		public Texture2D HeightMap;
-		public Vector2 Size = new (10f, 10f);
+		[Min(0f)] public Vector2 Size = new (10f, 10f);
 		public Vector2Int Resolution = new (50, 50);
 		public float Height = 2f;
 
@@ -43,6 +43,10 @@ namespace Nodra
 
 			var columns = Mathf.Max(1, Resolution.x);
 			var rows = Mathf.Max(1, Resolution.y);
+			// [Min] only constrains the Inspector - see GridGeneratorNode for why a negative Size still needs
+			// clamping here too. Height is left signed on purpose: it only offsets Y, so flipping it just turns
+			// the terrain upside down instead of inverting any winding.
+			var size = Vector2.Max(Vector2.zero, Size);
 			var readable = HeightMap != null && HeightMap.isReadable;
 			var startIndex = data.PointCount;
 
@@ -53,7 +57,7 @@ namespace Nodra
 					var u = col / (float) columns;
 					var v = row / (float) rows;
 					var sample = readable ? HeightMap.GetPixelBilinear(u, v).grayscale : 0f;
-					var position = new Vector3((u - 0.5f) * Size.x, sample * Height, (v - 0.5f) * Size.y);
+					var position = new Vector3((u - 0.5f) * size.x, sample * Height, (v - 0.5f) * size.y);
 
 					data.AddPoint(position, Vector3.up, new Vector2(u, v));
 				}

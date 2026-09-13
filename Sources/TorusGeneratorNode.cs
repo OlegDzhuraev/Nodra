@@ -29,8 +29,8 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public float MajorRadius = 1f;
-		public float MinorRadius = 0.25f;
+		[Min(0f)] public float MajorRadius = 1f;
+		[Min(0f)] public float MinorRadius = 0.25f;
 		[Min(3)] public int MajorSegments = 24;
 		[Min(3)] public int MinorSegments = 12;
 
@@ -42,6 +42,11 @@ namespace Nodra
 
 			var majorSegments = Mathf.Max(3, MajorSegments);
 			var minorSegments = Mathf.Max(3, MinorSegments);
+			// [Min] only constrains the Inspector - re-clamped here too, since a negative radius flips the tube's
+			// cross-section (or the whole ring) through its own center, self-intersecting rather than mirroring
+			// cleanly the way a single-axis Size does elsewhere.
+			var majorRadius = Mathf.Max(0f, MajorRadius);
+			var minorRadius = Mathf.Max(0f, MinorRadius);
 			var startIndex = data.PointCount;
 
 			var cosTheta = BuildAngleTable(majorSegments, out var sinTheta);
@@ -52,11 +57,11 @@ namespace Nodra
 				// Distance from the torus's own center axis to the tube's surface at this point around its
 				// cross-section - the outward normal there is simply the direction from the tube's own (thin)
 				// center circle to the surface point, i.e. (cos(phi), sin(phi)) rotated into this ring position.
-				var tubeRadius = MajorRadius + MinorRadius * cosPhi[row];
+				var tubeRadius = majorRadius + minorRadius * cosPhi[row];
 
 				for (var col = 0; col <= majorSegments; col++)
 				{
-					var position = new Vector3(tubeRadius * cosTheta[col], MinorRadius * sinPhi[row], tubeRadius * sinTheta[col]);
+					var position = new Vector3(tubeRadius * cosTheta[col], minorRadius * sinPhi[row], tubeRadius * sinTheta[col]);
 					var normal = new Vector3(cosPhi[row] * cosTheta[col], sinPhi[row], cosPhi[row] * sinTheta[col]);
 					var uv = new Vector2(col / (float) majorSegments, row / (float) minorSegments);
 

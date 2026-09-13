@@ -51,7 +51,7 @@ namespace Nodra
 			var indexOffset = target.PointCount;
 
 			for (var i = 0; i < source.PointCount; i++)
-				target.AddPoint(source.Points[i], source.Normals[i], source.Uvs[i]);
+				target.AddPoint(source.Points[i], source.Normals[i], source.Uvs[i], source.Colors[i]);
 
 			foreach (var primitive in source.Primitives)
 			{

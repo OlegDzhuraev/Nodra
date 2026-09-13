@@ -30,9 +30,9 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public float RadiusBottom = 0.5f;
-		public float RadiusTop = 0.5f;
-		public float Height = 2f;
+		[Min(0f)] public float RadiusBottom = 0.5f;
+		[Min(0f)] public float RadiusTop = 0.5f;
+		[Min(0f)] public float Height = 2f;
 		[Min(3)] public int Segments = 16;
 		public bool CapBottom = true;
 		public bool CapTop = true;
@@ -44,7 +44,15 @@ namespace Nodra
 			var data = input ?? new GeoData();
 
 			var segments = Mathf.Max(3, Segments);
-			var halfHeight = Height * 0.5f;
+
+			// [Min] only constrains the Inspector - re-clamped here too. A negative Height swaps which ring ends
+			// up physically above the other without swapping which one the winding below still treats as "bottom"
+			// (built first) vs "top", inverting every normal; a negative radius does the same via AddRing/AddCap's
+			// own radial math, same reasoning as CircleGeneratorNode.
+			var radiusBottom = Mathf.Max(0f, RadiusBottom);
+			var radiusTop = Mathf.Max(0f, RadiusTop);
+			var height = Mathf.Max(0f, Height);
+			var halfHeight = height * 0.5f;
 			var cos = BuildAngleTable(segments, out var sin);
 
 			// The side wall is a straight line from the bottom ring to the top one, so its normal only depends on
@@ -52,14 +60,14 @@ namespace Nodra
 			// slope between the two radii over the full height (a 2D direction in the "unrolled" radius/height
 			// plane; Vector2.right - flat vertical wall, no radial lean - covers the Height == RadiusBottom ==
 			// RadiusTop degenerate case, where the two radii being equal collapses the slope to zero).
-			var slopeVector = new Vector2(Height, RadiusBottom - RadiusTop);
+			var slopeVector = new Vector2(height, radiusBottom - radiusTop);
 			var slope = slopeVector.sqrMagnitude > 0f ? slopeVector.normalized : Vector2.right;
 
 			var bottomStart = data.PointCount;
-			AddRing(data, cos, sin, RadiusBottom, -halfHeight, slope);
+			AddRing(data, cos, sin, radiusBottom, -halfHeight, slope);
 
 			var topStart = data.PointCount;
-			AddRing(data, cos, sin, RadiusTop, halfHeight, slope);
+			AddRing(data, cos, sin, radiusTop, halfHeight, slope);
 
 			for (var col = 0; col < segments; col++)
 			{
@@ -71,11 +79,11 @@ namespace Nodra
 				data.AddPrimitive(i0, i2, i3, i1);
 			}
 
-			if (CapBottom && RadiusBottom > 0f)
-				AddCap(data, cos, sin, RadiusBottom, -halfHeight, Vector3.down, flip: false);
+			if (CapBottom && radiusBottom > 0f)
+				AddCap(data, cos, sin, radiusBottom, -halfHeight, Vector3.down, flip: false);
 
-			if (CapTop && RadiusTop > 0f)
-				AddCap(data, cos, sin, RadiusTop, halfHeight, Vector3.up, flip: true);
+			if (CapTop && radiusTop > 0f)
+				AddCap(data, cos, sin, radiusTop, halfHeight, Vector3.up, flip: true);
 
 			return data;
 		}

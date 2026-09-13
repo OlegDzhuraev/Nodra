@@ -28,14 +28,17 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public Vector3 Size = Vector3.one;
+		[Min(0f)] public Vector3 Size = Vector3.one;
 
 		public override int InputCount => 0;
 
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();
-			var h = Size * 0.5f;
+
+			// [Min] only constrains the Inspector - an odd number of negative components mirrors the whole box
+			// (orientation-reversing), which would face every one of its faces inward, so it's re-clamped here too.
+			var h = Vector3.Max(Vector3.zero, Size) * 0.5f;
 
 			AddFace(data, new Vector3(-h.x, h.y, -h.z), new Vector3(-h.x, h.y, h.z), new Vector3(h.x, h.y, h.z), new Vector3(h.x, h.y, -h.z), Vector3.up); // top
 			AddFace(data, new Vector3(-h.x, -h.y, -h.z), new Vector3(h.x, -h.y, -h.z), new Vector3(h.x, -h.y, h.z), new Vector3(-h.x, -h.y, h.z), Vector3.down); // bottom

@@ -29,7 +29,7 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public float Radius = 1f;
+		[Min(0f)] public float Radius = 1f;
 		[Min(3)] public int Segments = 16;
 		public bool Fill = true;
 
@@ -41,13 +41,16 @@ namespace Nodra
 
 			var segments = Mathf.Max(3, Segments);
 			var cos = BuildAngleTable(segments, out var sin);
+			// [Min] only constrains the Inspector - a negative Radius still needs clamping here too, or the fan
+			// below inverts (see the winding note on it).
+			var radius = Mathf.Max(0f, Radius);
 
 			var center = Fill ? data.AddPoint(Vector3.zero, Vector3.up, new Vector2(0.5f, 0.5f)) : -1;
 			var ringStart = data.PointCount;
 
 			for (var col = 0; col <= segments; col++)
 			{
-				var position = new Vector3(Radius * cos[col], 0f, Radius * sin[col]);
+				var position = new Vector3(radius * cos[col], 0f, radius * sin[col]);
 				var uv = new Vector2(cos[col] * 0.5f + 0.5f, sin[col] * 0.5f + 0.5f);
 
 				data.AddPoint(position, Vector3.up, uv);

@@ -28,7 +28,7 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public Vector2 Size = new (10f, 10f);
+		[Min(0f)] public Vector2 Size = new (10f, 10f);
 		public Vector2Int Resolution = new (10, 10);
 
 		public override int InputCount => 0;
@@ -39,6 +39,9 @@ namespace Nodra
 
 			var columns = Mathf.Max(1, Resolution.x);
 			var rows = Mathf.Max(1, Resolution.y);
+			// [Min] only constrains the Inspector - a negative Size mirrors one axis, which inverts this
+			// primitive's winding (same handedness argument as MirrorNode), so it's clamped again here too.
+			var size = Vector2.Max(Vector2.zero, Size);
 			var startIndex = data.PointCount;
 
 			for (var row = 0; row <= rows; row++)
@@ -47,7 +50,7 @@ namespace Nodra
 				{
 					var u = col / (float) columns;
 					var v = row / (float) rows;
-					var position = new Vector3((u - 0.5f) * Size.x, 0f, (v - 0.5f) * Size.y);
+					var position = new Vector3((u - 0.5f) * size.x, 0f, (v - 0.5f) * size.y);
 
 					data.AddPoint(position, Vector3.up, new Vector2(u, v));
 				}

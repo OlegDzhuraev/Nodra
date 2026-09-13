@@ -30,7 +30,7 @@ namespace Nodra
 	{
 		public override string Category => "Generators";
 
-		public float Radius = 1f;
+		[Min(0f)] public float Radius = 1f;
 
 		/// <summary> x: segments around the equator (longitude); y: rings from pole to pole (latitude). </summary>
 		public Vector2Int Resolution = new (16, 8);
@@ -43,6 +43,9 @@ namespace Nodra
 
 			var columns = Mathf.Max(3, Resolution.x);
 			var rows = Mathf.Max(2, Resolution.y);
+			// [Min] only constrains the Inspector - a negative Radius reflects every point through the origin,
+			// which (unlike a 2D point reflection) reverses this shape's winding, so it's re-clamped here too.
+			var radius = Mathf.Max(0f, Radius);
 			var startIndex = data.PointCount;
 
 			for (var row = 0; row <= rows; row++)
@@ -75,7 +78,7 @@ namespace Nodra
 							seamDirection = direction;
 					}
 
-					data.AddPoint(direction * Radius, direction, new Vector2(u, v));
+					data.AddPoint(direction * radius, direction, new Vector2(u, v));
 				}
 			}
 

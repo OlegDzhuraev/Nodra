@@ -33,7 +33,7 @@ namespace Nodra
 		public override string Category => "Build";
 
 		[Min(3)] public int Sides = 8;
-		public float Radius = 0.25f;
+		[Min(0f)] public float Radius = 0.25f;
 		public float Twist;
 
 		/// <summary> Loops the last ring back onto the first instead of capping the ends - the path itself isn't
@@ -54,9 +54,13 @@ namespace Nodra
 			input.Points.Clear();
 			input.Normals.Clear();
 			input.Uvs.Clear();
+			input.Colors.Clear();
 			input.Primitives.Clear();
 
 			var sides = Mathf.Max(3, Sides);
+			// [Min] only constrains the Inspector - re-clamped here too, since a negative Radius would reflect
+			// the cross-section through the path itself rather than just shrinking it.
+			var radius = Mathf.Max(0f, Radius);
 			var cos = BuildAngleTable(sides, out var sin);
 			var tangents = BuildTangents(path, Closed);
 			var frames = BuildFrames(path, tangents, Closed);
@@ -68,7 +72,7 @@ namespace Nodra
 			{
 				var frame = RotateFrame(frames[i], tangents[i], Twist);
 				ringStarts[i] = input.PointCount;
-				AddRing(input, cos, sin, path[i], frame.right, frame.up, v[i]);
+				AddRing(input, cos, sin, path[i], frame.right, frame.up, v[i], radius);
 			}
 
 			// Winding verified by hand against a straight +Y path (tangent (0,1,0), right (1,0,0), up =
@@ -95,19 +99,19 @@ namespace Nodra
 			if (!Closed)
 			{
 				if (CapStart)
-					AddCap(input, cos, sin, path[0], frames[0].right, frames[0].up, -tangents[0], flip: true);
+					AddCap(input, cos, sin, path[0], frames[0].right, frames[0].up, -tangents[0], flip: true, radius);
 
 				if (CapEnd)
 				{
 					var last = path.Count - 1;
-					AddCap(input, cos, sin, path[last], frames[last].right, frames[last].up, tangents[last], flip: false);
+					AddCap(input, cos, sin, path[last], frames[last].right, frames[last].up, tangents[last], flip: false, radius);
 				}
 			}
 
 			return input;
 		}
 
-		void AddRing(GeoData data, float[] cos, float[] sin, Vector3 center, Vector3 right, Vector3 up, float v)
+		static void AddRing(GeoData data, float[] cos, float[] sin, Vector3 center, Vector3 right, Vector3 up, float v, float radius)
 		{
 			var sides = cos.Length - 1;
 
@@ -116,14 +120,14 @@ namespace Nodra
 				var offset = right * cos[s] + up * sin[s];
 				var uv = new Vector2(s / (float) sides, v);
 
-				data.AddPoint(center + offset * Radius, offset, uv);
+				data.AddPoint(center + offset * radius, offset, uv);
 			}
 		}
 
 		// A fan from a center point, matching CylinderGeneratorNode.AddCap - flip true faces back along -tangent
 		// (the start), flip false faces forward along +tangent (the end), verified against the same straight-path
 		// example the side wall winding above was checked against.
-		void AddCap(GeoData data, float[] cos, float[] sin, Vector3 center, Vector3 right, Vector3 up, Vector3 normal, bool flip)
+		static void AddCap(GeoData data, float[] cos, float[] sin, Vector3 center, Vector3 right, Vector3 up, Vector3 normal, bool flip, float radius)
 		{
 			var sides = cos.Length - 1;
 			var centerIndex = data.AddPoint(center, normal, new Vector2(0.5f, 0.5f));
@@ -134,7 +138,7 @@ namespace Nodra
 				var offset = right * cos[s] + up * sin[s];
 				var uv = new Vector2(cos[s] * 0.5f + 0.5f, sin[s] * 0.5f + 0.5f);
 
-				data.AddPoint(center + offset * Radius, normal, uv);
+				data.AddPoint(center + offset * radius, normal, uv);
 			}
 
 			for (var s = 0; s < sides; s++)

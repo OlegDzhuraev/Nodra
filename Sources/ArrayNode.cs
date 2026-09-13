@@ -48,11 +48,13 @@ namespace Nodra
 			var sourcePoints = new List<Vector3>(input.Points);
 			var sourceNormals = new List<Vector3>(input.Normals);
 			var sourceUvs = new List<Vector2>(input.Uvs);
+			var sourceColors = new List<Color>(input.Colors);
 			var sourcePrimitives = new List<int[]>(input.Primitives);
 
 			input.Points.Clear();
 			input.Normals.Clear();
 			input.Uvs.Clear();
+			input.Colors.Clear();
 			input.Primitives.Clear();
 
 			var count = Mathf.Max(1, Count);
@@ -66,7 +68,7 @@ namespace Nodra
 				for (var i = 0; i < sourcePoints.Count; i++)
 				{
 					var position = Pivot + rotation * (sourcePoints[i] - Pivot) + translation;
-					input.AddPoint(position, rotation * sourceNormals[i], sourceUvs[i]);
+					input.AddPoint(position, rotation * sourceNormals[i], sourceUvs[i], sourceColors[i]);
 				}
 
 				foreach (var primitive in sourcePrimitives)
