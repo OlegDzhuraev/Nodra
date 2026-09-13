@@ -17,15 +17,24 @@
  */
 
 using System;
+using UnityEngine;
 
 namespace Nodra
 {
-	/// <summary> Marks its input as the graph's final mesh - GeoGraph.GetOutputNode() looks for a node of this
-	/// type. </summary>
-	[Serializable]
-	public class GeometryOutputNode : GeoNode
+	/// <summary> Clamps a Vector2Int field's X/Y to MinX/MinY live as the user types - Unity's built-in [Min]
+	/// only supports float/int/Vector2/Vector3/Vector4, not the Int vector types, so a Resolution field otherwise
+	/// accepts a negative value in the field itself even though a node's own Process() clamps it internally. </summary>
+	[AttributeUsage(AttributeTargets.Field)]
+	public class MinVector2IntAttribute : PropertyAttribute
 	{
-		public override string Category => "Output";
-		public override bool HasOutput => false;
+		public readonly int MinX, MinY;
+
+		public MinVector2IntAttribute(int min) : this(min, min) { }
+
+		public MinVector2IntAttribute(int minX, int minY)
+		{
+			MinX = minX;
+			MinY = minY;
+		}
 	}
 }

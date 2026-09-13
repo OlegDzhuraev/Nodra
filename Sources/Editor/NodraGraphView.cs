@@ -76,6 +76,23 @@ namespace Nodra
 			serializeGraphElements = SerializeSelection;
 			canPasteSerializedData = data => !string.IsNullOrEmpty(data);
 			unserializeAndPaste = UnserializeAndPaste;
+
+			RegisterCallback<KeyDownEvent>(OnKeyDown);
+		}
+
+		// actionKey is Ctrl on Windows/Linux, Cmd on Mac - a text field mid-edit (a node's own Segments field,
+		// say) gets first crack at the same keystroke for its own "select all text" and stops it there, so this
+		// only ever fires when the graph canvas itself has focus.
+		void OnKeyDown(KeyDownEvent evt)
+		{
+			if (!evt.actionKey || evt.keyCode != KeyCode.A)
+				return;
+
+			ClearSelection();
+			foreach (var view in viewsById.Values)
+				AddToSelection(view);
+
+			evt.StopPropagation();
 		}
 
 		public void Bind(ProceduralMeshGenerator target, Action onChanged)
@@ -85,6 +102,12 @@ namespace Nodra
 			onGraphChanged = onChanged;
 
 			Populate();
+
+			// Deferred a tick rather than called right here - UI Toolkit only computes each new NodraNodeView's
+			// actual laid-out size/position on the next update, and FrameAll() needs real geometry to frame
+			// around. Otherwise a freshly-opened window (e.g. a brand new graph's lone GeometryOutputNode, seeded
+			// well away from wherever the view happens to default to) can leave its only content off-screen.
+			schedule.Execute(() => FrameAll()).ExecuteLater(0);
 		}
 
 		public void Populate()
@@ -141,6 +164,9 @@ namespace Nodra
 			foreach (var edge in generator.Graph.Edges)
 			{
 				if (!viewsById.TryGetValue(edge.FromNodeId, out var from) || !viewsById.TryGetValue(edge.ToNodeId, out var to))
+					continue;
+
+				if (from.OutputPort == null)
 					continue;
 
 				if (edge.ToPortIndex < 0 || edge.ToPortIndex >= to.InputPorts.Length)

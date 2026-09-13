@@ -34,6 +34,12 @@ namespace Nodra
 		[Min(0f)] public float RadiusTop = 0.5f;
 		[Min(0f)] public float Height = 2f;
 		[Min(3)] public int Segments = 16;
+
+		// 1 (the default) is just the original two-ring cylinder - bottom and top joined directly. Anything higher
+		// adds intermediate rings along the axis, purely extra geometry for downstream nodes (Bend, Twist,
+		// NoiseDisplace, ...) to deform; the side wall is straight either way, so this doesn't change its shape.
+		[Min(1)] public int HeightSegments = 1;
+
 		public bool CapBottom = true;
 		public bool CapTop = true;
 
@@ -44,6 +50,7 @@ namespace Nodra
 			var data = input ?? new GeoData();
 
 			var segments = Mathf.Max(3, Segments);
+			var heightSegments = Mathf.Max(1, HeightSegments);
 
 			// [Min] only constrains the Inspector - re-clamped here too. A negative Height swaps which ring ends
 			// up physically above the other without swapping which one the winding below still treats as "bottom"
@@ -59,24 +66,39 @@ namespace Nodra
 			// angle, not height - just how much of it points radially outward vs. straight up/down, which is the
 			// slope between the two radii over the full height (a 2D direction in the "unrolled" radius/height
 			// plane; Vector2.right - flat vertical wall, no radial lean - covers the Height == RadiusBottom ==
-			// RadiusTop degenerate case, where the two radii being equal collapses the slope to zero).
+			// RadiusTop degenerate case, where the two radii being equal collapses the slope to zero). Constant
+			// across every ring below, since the wall is straight rather than bowed.
 			var slopeVector = new Vector2(height, radiusBottom - radiusTop);
 			var slope = slopeVector.sqrMagnitude > 0f ? slopeVector.normalized : Vector2.right;
 
-			var bottomStart = data.PointCount;
-			AddRing(data, cos, sin, radiusBottom, -halfHeight, slope);
+			// One ring per height step, radius/y lerped between the bottom and top ring - HeightSegments == 1
+			// collapses this to exactly the old two-ring build (t = 0 and t = 1).
+			var ringStarts = new int[heightSegments + 1];
 
-			var topStart = data.PointCount;
-			AddRing(data, cos, sin, radiusTop, halfHeight, slope);
-
-			for (var col = 0; col < segments; col++)
+			for (var row = 0; row <= heightSegments; row++)
 			{
-				var i0 = bottomStart + col;
-				var i1 = i0 + 1;
-				var i2 = topStart + col;
-				var i3 = i2 + 1;
+				var t = row / (float) heightSegments;
+				var y = Mathf.Lerp(-halfHeight, halfHeight, t);
+				var radius = Mathf.Lerp(radiusBottom, radiusTop, t);
 
-				data.AddPrimitive(i0, i2, i3, i1);
+				ringStarts[row] = data.PointCount;
+				AddRing(data, cos, sin, radius, y, slope, t);
+			}
+
+			for (var row = 0; row < heightSegments; row++)
+			{
+				var rowStart = ringStarts[row];
+				var nextRowStart = ringStarts[row + 1];
+
+				for (var col = 0; col < segments; col++)
+				{
+					var i0 = rowStart + col;
+					var i1 = i0 + 1;
+					var i2 = nextRowStart + col;
+					var i3 = i2 + 1;
+
+					data.AddPrimitive(i0, i2, i3, i1);
+				}
 			}
 
 			if (CapBottom && radiusBottom > 0f)
@@ -88,7 +110,7 @@ namespace Nodra
 			return data;
 		}
 
-		static void AddRing(GeoData data, float[] cos, float[] sin, float radius, float y, Vector2 slope)
+		static void AddRing(GeoData data, float[] cos, float[] sin, float radius, float y, Vector2 slope, float v)
 		{
 			var segments = cos.Length - 1;
 
@@ -96,7 +118,7 @@ namespace Nodra
 			{
 				var position = new Vector3(radius * cos[col], y, radius * sin[col]);
 				var normal = new Vector3(slope.x * cos[col], slope.y, slope.x * sin[col]);
-				var uv = new Vector2(col / (float) segments, y < 0f ? 0f : 1f);
+				var uv = new Vector2(col / (float) segments, v);
 
 				data.AddPoint(position, normal, uv);
 			}

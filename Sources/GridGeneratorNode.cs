@@ -29,7 +29,7 @@ namespace Nodra
 		public override string Category => "Generators";
 
 		[Min(0f)] public Vector2 Size = new (10f, 10f);
-		public Vector2Int Resolution = new (10, 10);
+		[MinVector2Int(1)] public Vector2Int Resolution = new (10, 10);
 
 		public override int InputCount => 0;
 

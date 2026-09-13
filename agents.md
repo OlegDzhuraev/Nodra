@@ -30,6 +30,10 @@ Sources/
                          Warning (null by default - shown as a HelpBox in the graph editor when overridden),
                          Category ("Modifiers" by default - which "Create Node" submenu this type is filed under;
                          every concrete node overrides it - see NodraGraphView.CategoryOrder for the set in use)
+  MinVector2IntAttribute.cs  [MinVector2Int(min)] / (minX, minY) - Unity's built-in [Min] doesn't support
+                             Vector2Int/Vector3Int, so a Resolution field needs this instead to reject a
+                             too-small/negative value in the field itself, matching whatever the node's own
+                             Process() already clamps to internally (see MinVector2IntDrawer, Sources/Editor/)
   GeoEdge.cs             one connection: FromNodeId -> ToNodeId's ToPortIndex
   GeoGraph.cs            [SerializeReference] node list + edges; Evaluate() topologically pulls from the output node
   *GeneratorNode.cs      Grid, HeightMap (grid displaced by a Texture2D's grayscale - needs Read/Write Enabled),
@@ -101,7 +105,8 @@ Sources/
                            types referenced from component" or losing the node on the next save. Quadric-error
                            decimation via UnityMeshSimplifier.MeshSimplifier.SimplifyMesh(Quality), fan-triangulates
                            GeoData in, 3-point primitives out, same as GeoCsg.ToGeoData
-  ProceduralMeshGenerator.cs   MonoBehaviour: runs Graph.Evaluate(), bakes into the attached MeshFilter
+  ProceduralMeshGenerator.cs   MonoBehaviour: runs Graph.Evaluate(), bakes into the attached MeshFilter; Reset()
+                               seeds a fresh Graph with one GeometryOutputNode (first add / Inspector "Reset")
   Editor/
     Nodra.Editor.asmdef        editor-only assembly, references only Nodra
     NodraGraphWindow.cs        EditorWindow: toolbar (target, Auto Generate, Generate) + NodraGraphView
@@ -114,6 +119,8 @@ Sources/
                                GeoNode.Warning (if any) shown as a HelpBox above the fields
     NodraPort.cs               Port subclass reaching Port's protected ctor - only way to attach our own
                                IEdgeConnectorListener instead of Port's hardcoded default one
+    MinVector2IntDrawer.cs     [CustomPropertyDrawer] for MinVector2IntAttribute - PropertyField picks it up
+                               automatically, no NodraNodeView changes needed
     ProceduralMeshGeneratorEditor.cs   AutoGenerate toggle, "Open Graph Editor" button, Generate/Save Mesh buttons,
                                        session-only Show Normals toggle (draws a Scene view line per baked
                                        Mesh.normals entry - what's actually rendered, not GeoData.Normals)

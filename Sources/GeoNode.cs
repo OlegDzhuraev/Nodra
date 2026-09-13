@@ -44,6 +44,10 @@ namespace Nodra
 		/// <summary> Label for input port `index`, shown in the graph editor. </summary>
 		public virtual string GetInputPortName(int index) => InputCount <= 1 ? "In" : $"In {index}";
 
+		/// <summary> Whether the graph editor should draw an output port for this node - true for everything
+		/// except GeometryOutputNode, which is the graph's terminal node and so has nothing to feed downstream. </summary>
+		public virtual bool HasOutput => true;
+
 		/// <summary> Submenu this node type is filed under in the graph editor's "Create Node" menu - purely a
 		/// grouping label, read nowhere else. Defaults to "Modifiers"; override with something more specific
 		/// (see NodraGraphView.CategoryOrder for the established set). </summary>

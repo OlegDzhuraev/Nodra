@@ -70,6 +70,13 @@ namespace Nodra
 		}
 
 #if UNITY_EDITOR
+		// Only fires when the component is first added (or via the Inspector's own "Reset" context menu action) -
+		// a brand new graph starts with somewhere for the mesh to actually come from, instead of an empty canvas
+		// needing a manual right-click every time. Left out of the GeoGraph constructor on purpose: Unity re-runs
+		// a plain [Serializable] class's constructor on every deserialize, including an already-saved graph full
+		// of the user's own nodes, which isn't a safe place for a one-time "seed the default state" side effect.
+		void Reset() => Graph.Nodes.Add(new GeometryOutputNode());
+
 		bool regenerateQueued;
 
 		// Covers edits to a node's own field values, which reach here through the normal SerializedProperty ->

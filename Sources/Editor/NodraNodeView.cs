@@ -34,6 +34,9 @@ namespace Nodra
 
 		public readonly GeoNode Node;
 		public readonly Port[] InputPorts;
+
+		/// <summary> Null for a node whose GeoNode.HasOutput is false (GeometryOutputNode) - it's the graph's
+		/// terminal node, so it has nothing to connect downstream. </summary>
 		public readonly Port OutputPort;
 
 		readonly NodraGraphView owner;
@@ -99,9 +102,12 @@ namespace Nodra
 				inputContainer.Add(port);
 			}
 
-			OutputPort = NodraPort.Create(Orientation.Horizontal, Direction.Output, Port.Capacity.Multi, typeof(GeoData), owner);
-			OutputPort.portName = "Out";
-			outputContainer.Add(OutputPort);
+			if (node.HasOutput)
+			{
+				OutputPort = NodraPort.Create(Orientation.Horizontal, Direction.Output, Port.Capacity.Multi, typeof(GeoData), owner);
+				OutputPort.portName = "Out";
+				outputContainer.Add(OutputPort);
+			}
 
 			BuildWarning(node);
 			BuildFieldEditors(nodeProperty);

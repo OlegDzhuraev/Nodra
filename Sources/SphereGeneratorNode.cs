@@ -33,7 +33,7 @@ namespace Nodra
 		[Min(0f)] public float Radius = 1f;
 
 		/// <summary> x: segments around the equator (longitude); y: rings from pole to pole (latitude). </summary>
-		public Vector2Int Resolution = new (16, 8);
+		[MinVector2Int(3, 2)] public Vector2Int Resolution = new (16, 8);
 
 		public override int InputCount => 0;
 

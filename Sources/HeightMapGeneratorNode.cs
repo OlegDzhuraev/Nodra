@@ -32,7 +32,7 @@ namespace Nodra
 
 		public Texture2D HeightMap;
 		[Min(0f)] public Vector2 Size = new (10f, 10f);
-		public Vector2Int Resolution = new (50, 50);
+		[MinVector2Int(1)] public Vector2Int Resolution = new (50, 50);
 		public float Height = 2f;
 
 		public override int InputCount => 0;

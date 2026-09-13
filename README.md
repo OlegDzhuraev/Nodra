@@ -15,27 +15,51 @@ port(s), and the result is baked into a `Mesh` at the end. Edit the graph visual
 
 ## Nodes
 
-- **Generators** — `GridGeneratorNode`, `HeightMapGeneratorNode` (a grid displaced along Y by a Texture2D's
-  grayscale value - simple heightmap terrain, needs the texture's Read/Write Enabled import setting on),
-  `BoxGeneratorNode`, `SphereGeneratorNode` (UV sphere), `IcoSphereGeneratorNode`
-  (subdivided icosahedron - even triangle sizes, no pole pinching), `CircleGeneratorNode` (flat disc, optionally
-  unfilled to feed `ExtrudeNode`), `CylinderGeneratorNode` (also a cone/frustum via `RadiusTop`/`RadiusBottom`),
-  `TorusGeneratorNode`, `LineGeneratorNode`/`SplineGeneratorNode` (straight line / Catmull-Rom curve through a list
-  of control points - `SplineGeneratorNode`'s own control points always draw as yellow, draggable Scene view
-  handles, regardless of the graph's current Output; points only, no faces, feed either into `CopyToPointsNode` for
-  fences/columns/stepping stones along a path; set
-  one as Output directly and, like `ScatterNode` below, its points/normals draw as Scene view gizmos)
-- **Modifiers** — `TransformNode`, `NoiseDisplaceNode` (Perlin or Voronoi/cellular noise),
-  `ExtrudeNode`, `ChamferNode`, `SmoothByAngleNode`, `TubeNode` (sweeps a polygon cross-section - a "beam" at low `Sides`,
-  a round tube at high ones - along a points-only path like `LineGeneratorNode`/`SplineGeneratorNode`), `ArrayNode`,
-  `VertexColorNode`, `MirrorNode`, `FlipNormalsNode`, `WeldNode`, `TaperNode`,
-  `BendNode`, `TwistNode`, `RelaxNode` (Laplacian smoothing), `SubdivideNode`, `CapHolesNode`, `FaceFilterNode`,
-   `DecimateNode` (requires 3rd party package install), `AutoUVNode` (Triplanar/Spherical/Cylindrical projection);
-- **Scatter/copy** — `ScatterNode` + `CopyToPointsNode` (scatter points across a surface, then stamp a mesh at each
-  one);
-- **Combine** — `MergeNode` (two input ports, "Base" and "Branch" - appends the branch's geometry into the base);
-  `BooleanNode` (Union/Subtract/Intersect - a CSG boolean via a BSP tree; both inputs need to be closed, manifold
-  shapes).
+###### Generators
+
+- `GridGeneratorNode` — a flat, subdivided plane
+- `HeightMapGeneratorNode` — a terrain-like plane shaped by a heightmap texture
+- `BoxGeneratorNode` — a box
+- `SphereGeneratorNode` — a sphere
+- `IcoSphereGeneratorNode` — a sphere with even, non-pinched triangles
+- `CircleGeneratorNode` — a flat disc
+- `CylinderGeneratorNode` — a cylinder or cone
+- `TorusGeneratorNode` — a torus (donut shape)
+- `LineGeneratorNode` — a straight line of points
+- `SplineGeneratorNode` — a smooth curved path of points, editable directly in the Scene view
+
+###### Modifiers
+
+- `TransformNode` — moves, rotates and scales the mesh
+- `NoiseDisplaceNode` — roughens the surface with noise
+- `ExtrudeNode` — pushes the surface outward into a solid shape
+- `ChamferNode` — softens sharp edges with a small bevel
+- `SmoothByAngleNode` — smooths or facets shading based on edge angle
+- `TubeNode` — wraps a tube or beam around a path
+- `ArrayNode` — repeats the mesh in a row, ring or spiral
+- `VertexColorNode` — paints the mesh with a flat color or gradient
+- `MirrorNode` — mirrors the mesh across an axis
+- `FlipNormalsNode` — turns the mesh inside out
+- `WeldNode` — merges nearby duplicate points together
+- `TaperNode` — narrows or widens the mesh along an axis
+- `BendNode` — curves the mesh into an arc
+- `TwistNode` — twists the mesh around an axis
+- `RelaxNode` — smooths out jagged geometry
+- `SubdivideNode` — adds extra detail to the mesh
+- `CapHolesNode` — fills open holes in the mesh
+- `FaceFilterNode` — removes faces facing a chosen direction
+- `DecimateNode` — reduces the mesh's triangle count (needs an optional extra package)
+- `AutoUVNode` — generates simple UVs automatically
+
+###### Scatter/copy
+
+- `ScatterNode` — scatters points across a surface
+- `CopyToPointsNode` — stamps a mesh at each scattered point
+
+###### Combine
+
+- `MergeNode` — combines two meshes into one
+- `BooleanNode` — cuts or combines two shapes like real solids
 
 ## How to use
 
