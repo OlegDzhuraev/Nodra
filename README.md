@@ -1,4 +1,6 @@
-![Nodra](Extras/Repo/nodra_logo.png)
+<p align="center">
+  <img src="Extras/Repo/nodra_logo.png" alt="Nodra" width="300">
+</p>
 
 # Nodra
 
