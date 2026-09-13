@@ -40,10 +40,6 @@ namespace Nodra
 		SerializedObject serializedObject;
 		Action onGraphChanged;
 
-		// Set for the duration of Populate() - rebuilding pulls every node back into its GeoGroup's visual Group
-		// via Group.AddElement, same as a user dragging one in would, which would otherwise fire the
-		// elementsAddedToGroup/elementsRemovedFromGroup callbacks below and write the (already-current) data back
-		// with their own spurious Undo step.
 		bool populating;
 
 		public NodraGraphView()
@@ -149,9 +145,6 @@ namespace Nodra
 			foreach (var view in viewsById.Values)
 				view.RefreshPorts();
 
-			// Groups are plain UnityEditor.Experimental.GraphView.Group instances, same as GroupSelection() below
-			// creates - each one added empty, then given back its members via Group.AddElement so it immediately
-			// resizes/repositions itself around them, rather than trying to keep a separately-stored rect in sync.
 			foreach (var geoGroup in generator.Graph.Groups)
 			{
 				var groupView = new Group { title = geoGroup.Title, userData = geoGroup };
@@ -165,34 +158,6 @@ namespace Nodra
 			RefreshOutputHighlight();
 		}
 
-		/// <summary> True if `node` is explicitly pinned as the graph's output (GeoGraph.OutputNodeId) - as opposed
-		/// to merely being the one FindDefaultOutput would currently pick. Drives the node's context menu wording. </summary>
-		public bool IsExplicitOutput(GeoNode node) => generator?.Graph != null && generator.Graph.OutputNodeId == node.Id;
-
-		public void SetOutputNode(GeoNode node)
-		{
-			Undo.RecordObject(generator, "Set Output Node");
-			generator.Graph.OutputNodeId = node.Id;
-			CommitOutputChange();
-		}
-
-		public void ClearOutputNode()
-		{
-			Undo.RecordObject(generator, "Clear Output Node");
-			generator.Graph.OutputNodeId = null;
-			CommitOutputChange();
-		}
-
-		void CommitOutputChange()
-		{
-			EditorUtility.SetDirty(generator);
-			serializedObject.Update();
-			RefreshOutputHighlight();
-			onGraphChanged?.Invoke();
-		}
-
-		// Highlights whichever node GeoGraph.GetOutputNode() currently resolves to - not just an explicit
-		// OutputNodeId, since most graphs never set one and rely entirely on the "last dangling node" default.
 		void RefreshOutputHighlight()
 		{
 			var outputId = generator?.Graph?.GetOutputNode()?.Id;
@@ -238,9 +203,6 @@ namespace Nodra
 			base.BuildContextualMenu(evt);
 		}
 
-		// Both actions lean entirely on the elementsAddedToGroup/elementsRemovedFromGroup callbacks below to sync
-		// GeoGraph.Groups - Group.AddElement/RemoveElement is what actually reparents the node view (and, for
-		// AddElement, resizes the group to fit), and GraphView invokes those callbacks as a consequence.
 		void GroupSelection(List<NodraNodeView> nodeViews)
 		{
 			if (nodeViews.Count == 0)
@@ -297,7 +259,10 @@ namespace Nodra
 
 			// Dragged out of targetView's input (backwards, looking for a source) - wire the new node's output into it.
 			if (targetView != null)
+			{
+				generator.Graph.Edges.RemoveAll(e => e.ToNodeId == targetView.Node.Id && e.ToPortIndex == targetPortIndex);
 				generator.Graph.Edges.Add(new GeoEdge { FromNodeId = node.Id, ToNodeId = targetView.Node.Id, ToPortIndex = targetPortIndex });
+			}
 
 			EditorUtility.SetDirty(generator);
 			Populate();
@@ -314,6 +279,21 @@ namespace Nodra
 		// port's connector dot, otherwise cosmetically indistinguishable from a disconnected one.
 		public void OnDrop(GraphView graphView, Edge edge)
 		{
+			var toDelete = new List<GraphElement>();
+
+			if (edge.input?.capacity == Port.Capacity.Single)
+				foreach (var connection in edge.input.connections)
+					if (connection != edge)
+						toDelete.Add(connection);
+
+			if (edge.output?.capacity == Port.Capacity.Single)
+				foreach (var connection in edge.output.connections)
+					if (connection != edge)
+						toDelete.Add(connection);
+
+			if (toDelete.Count > 0)
+				graphView.DeleteElements(toDelete);
+
 			var change = new GraphViewChange { edgesToCreate = new List<Edge> { edge } };
 			var edgesToCreate = graphViewChanged != null ? graphViewChanged(change).edgesToCreate : change.edgesToCreate;
 
@@ -429,8 +409,6 @@ namespace Nodra
 					Undo.RecordObject(generator, "Remove Node");
 					generator.Graph.Nodes.Remove(nodeView.Node);
 					generator.Graph.Edges.RemoveAll(e => e.FromNodeId == nodeView.Node.Id || e.ToNodeId == nodeView.Node.Id);
-					if (generator.Graph.OutputNodeId == nodeView.Node.Id)
-						generator.Graph.OutputNodeId = null;
 					viewsById.Remove(nodeView.Node.Id);
 					return true;
 
@@ -440,8 +418,6 @@ namespace Nodra
 					generator.Graph.Edges.RemoveAll(e => e.FromNodeId == from.Node.Id && e.ToNodeId == to.Node.Id && e.ToPortIndex == portIndex);
 					return true;
 
-				// Deleting the group itself, not its members - GraphView releases each contained node view back
-				// onto the canvas rather than deleting them too, so only the GeoGroup entry needs to go here.
 				case Group groupView when groupView.userData is GeoGroup geoGroup:
 					Undo.RecordObject(generator, "Remove Group");
 					generator.Graph.Groups.Remove(geoGroup);
@@ -471,8 +447,6 @@ namespace Nodra
 			return any;
 		}
 
-		// Fires for a Group's title Label losing focus after an edit - covers both a brand new group (still named
-		// "New Group") and renaming an existing one.
 		void OnGroupTitleChanged(Group group, string title)
 		{
 			if (populating || group.userData is not GeoGroup geoGroup || geoGroup.Title == title)
@@ -484,8 +458,6 @@ namespace Nodra
 			onGraphChanged?.Invoke();
 		}
 
-		// Fires for every way a node ends up inside a group: GroupSelection() above, and the user dragging a node
-		// (or a whole other selection) onto one directly on the canvas.
 		void OnElementsAddedToGroup(Group group, IEnumerable<GraphElement> elements)
 		{
 			if (populating || group.userData is not GeoGroup geoGroup)
@@ -512,8 +484,6 @@ namespace Nodra
 			}
 		}
 
-		// Fires for UngroupSelection() above, dragging a node out of its group, and (as a side effect of the group
-		// releasing its members first) deleting a group that still has some.
 		void OnElementsRemovedFromGroup(Group group, IEnumerable<GraphElement> elements)
 		{
 			if (populating || group.userData is not GeoGroup geoGroup)

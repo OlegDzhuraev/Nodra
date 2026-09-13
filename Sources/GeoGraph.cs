@@ -33,21 +33,18 @@ namespace Nodra
 		public List<GeoEdge> Edges = new ();
 		public List<GeoGroup> Groups = new ();
 
-		/// <summary> Which node's output becomes the final mesh. Empty/stale means "figure it out" - see
-		/// FindDefaultOutput - so a freshly-built linear chain works without the user ever touching this. </summary>
-		public string OutputNodeId;
-
-		/// <summary> Which node's output the graph currently resolves as its final mesh - explicit OutputNodeId if
-		/// it still points at a real node, otherwise whichever node feeds nothing else (see FindDefaultOutput).
-		/// Exposed so the graph editor can highlight it, not just Evaluate(). </summary>
+		/// <summary> Which node's output the graph currently resolves as its final mesh - a GeometryOutputNode if
+		/// the graph has one, otherwise whichever node feeds nothing else (see FindDefaultOutput). Exposed so the
+		/// graph editor can highlight it, not just Evaluate(). </summary>
 		public GeoNode GetOutputNode()
 		{
-			if (!string.IsNullOrEmpty(OutputNodeId))
-				foreach (var node in Nodes)
-					if (node != null && node.Id == OutputNodeId)
-						return node;
+			GeoNode explicitOutput = null;
 
-			return FindDefaultOutput();
+			foreach (var node in Nodes)
+				if (node is GeometryOutputNode)
+					explicitOutput = node;
+
+			return explicitOutput ?? FindDefaultOutput();
 		}
 
 		public GeoData Evaluate()

@@ -68,21 +68,30 @@ namespace Nodra
 			SceneView.lastActiveSceneView?.FrameSelected();
 		}
 
+		static readonly Color PointCloudColor = new (0.3f, 0.85f, 1f, 0.9f);
+		static readonly Color ControlPointColor = new (1f, 0.85f, 0.1f, 0.95f);
+
+		void OnSceneGUI()
+		{
+			var generator = (ProceduralMeshGenerator) target;
+
+			DrawPointCloud(generator);
+			DrawSplineControlPoints(generator);
+		}
+
 		// A point-cloud result (ScatterNode's/LineGeneratorNode's typical output - or any other node whose result
 		// happens to have points but no faces) bakes into a Mesh with vertices but zero triangles - nothing to see
 		// there, so its points are drawn directly in the Scene view instead. Judged purely by the data's own shape,
 		// not by which node produced it, so this covers any such node without needing to know about it by name;
 		// a real mesh already shows itself and doesn't need this.
-		void OnSceneGUI()
+		static void DrawPointCloud(ProceduralMeshGenerator generator)
 		{
-			var generator = (ProceduralMeshGenerator) target;
 			var data = generator.LastEvaluatedData;
-
 			if (data == null || data.PointCount == 0 || data.Primitives.Count > 0)
 				return;
 
 			var previousColor = Handles.color;
-			Handles.color = new Color(0.3f, 0.85f, 1f, 0.9f);
+			Handles.color = PointCloudColor;
 
 			for (var i = 0; i < data.PointCount; i++)
 			{
@@ -93,6 +102,45 @@ namespace Nodra
 
 				if (i < data.Normals.Count)
 					Handles.DrawLine(worldPosition, worldPosition + generator.transform.TransformDirection(data.Normals[i]) * (size * 6f));
+			}
+
+			Handles.color = previousColor;
+		}
+
+		// Drawn for every SplineGeneratorNode in the graph regardless of which one is the current Output - control
+		// points are authored data on the node itself, not part of any evaluated GeoData, so you can see/drag the
+		// curve's shape in the Scene view even while something further downstream is what actually gets generated.
+		static void DrawSplineControlPoints(ProceduralMeshGenerator generator)
+		{
+			if (generator.Graph?.Nodes == null)
+				return;
+
+			var previousColor = Handles.color;
+			Handles.color = ControlPointColor;
+
+			foreach (var node in generator.Graph.Nodes)
+			{
+				if (node is not SplineGeneratorNode spline || spline.ControlPoints == null || spline.ControlPoints.Count == 0)
+					continue;
+
+				foreach (var point in spline.ControlPoints)
+				{
+					var worldPosition = generator.transform.TransformPoint(point);
+					var size = HandleUtility.GetHandleSize(worldPosition) * 0.05f;
+
+					Handles.SphereHandleCap(0, worldPosition, Quaternion.identity, size, EventType.Repaint);
+				}
+
+				var count = spline.ControlPoints.Count;
+				var segments = spline.Closed ? count : count - 1;
+
+				for (var i = 0; i < segments; i++)
+				{
+					var from = generator.transform.TransformPoint(spline.ControlPoints[i]);
+					var to = generator.transform.TransformPoint(spline.ControlPoints[(i + 1) % count]);
+
+					Handles.DrawLine(from, to);
+				}
 			}
 
 			Handles.color = previousColor;

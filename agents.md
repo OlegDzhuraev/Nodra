@@ -29,11 +29,12 @@ Sources/
   GeoEdge.cs             one connection: FromNodeId -> ToNodeId's ToPortIndex
   GeoGraph.cs            [SerializeReference] node list + edges; Evaluate() topologically pulls from the output node
   *GeneratorNode.cs      Grid, Box, Sphere, Cylinder (also cone/frustum), Torus - InputCount 0, add fresh geometry
-  LineGeneratorNode.cs   InputCount 0, points only (no primitives) - see ScatterNode below
+  LineGeneratorNode.cs, SplineGeneratorNode.cs (Catmull-Rom)  InputCount 0, points only - see ScatterNode below
   TransformNode.cs, NoiseDisplaceNode.cs, ExtrudeNode.cs  - modifiers, mutate what they receive
   ChamferNode.cs         facets every shared edge (per-face inset + bridge quad) and caps 3+-face corners via a
                          face-adjacency walk (PositionKey, not index, so it works across per-face-duplicated
                          vertices too) - simplified bevel stand-in, only an open boundary edge is left ungapped
+  AutoUVNode.cs          Triplanar/Spherical/Cylindrical UV projection - not a real unwrap
   ScatterNode.cs, CopyToPointsNode.cs                     - scatter points across a surface, then stamp a mesh at each
   MergeNode.cs           InputCount 2 ("Base"/"Branch") - appends the branch's geometry into the base
   BooleanNode.cs         InputCount 2 ("A"/"B") - real CSG Union/Subtract/Intersect, delegates to GeoCsg

@@ -38,6 +38,7 @@ namespace Nodra
 
 		readonly NodraGraphView owner;
 		readonly Label outputBadge;
+		readonly VisualElement outputOutline;
 
 		public NodraNodeView(GeoNode node, SerializedProperty nodeProperty, NodraGraphView owner)
 		{
@@ -99,31 +100,20 @@ namespace Nodra
 			SetPosition(new Rect(node.Position, Vector2.zero));
 			RefreshExpandedState();
 			RefreshPorts();
+
+			outputOutline = new VisualElement { pickingMode = PickingMode.Ignore, style = { display = DisplayStyle.None } };
+			outputOutline.AddToClassList("nodra-node-output-outline");
+			hierarchy.Add(outputOutline);
 		}
 
 		/// <summary> Toggles the green border/"OUTPUT" badge - called by NodraGraphView whenever the graph's
-		/// resolved output node might have changed (populate, connect/disconnect, remove, explicit Set As Output). </summary>
+		/// resolved output node might have changed (populate, connect/disconnect, remove, add/remove a
+		/// GeometryOutputNode). </summary>
 		public void SetIsOutput(bool isOutput)
 		{
-			outputBadge.style.display = isOutput ? DisplayStyle.Flex : DisplayStyle.None;
-
-			var width = isOutput ? new StyleFloat(2f) : new StyleFloat(StyleKeyword.Null);
-			var color = isOutput ? new StyleColor(OutputHighlightColor) : new StyleColor(StyleKeyword.Null);
-
-			style.borderTopWidth = style.borderRightWidth = style.borderBottomWidth = style.borderLeftWidth = width;
-			style.borderTopColor = style.borderRightColor = style.borderBottomColor = style.borderLeftColor = color;
-		}
-
-		public override void BuildContextualMenu(ContextualMenuPopulateEvent evt)
-		{
-			base.BuildContextualMenu(evt);
-
-			evt.menu.AppendSeparator();
-
-			if (owner.IsExplicitOutput(Node))
-				evt.menu.AppendAction("Clear Output (Auto)", _ => owner.ClearOutputNode());
-			else
-				evt.menu.AppendAction("Set As Output", _ => owner.SetOutputNode(Node));
+			var display = isOutput ? DisplayStyle.Flex : DisplayStyle.None;
+			outputBadge.style.display = display;
+			outputOutline.style.display = display;
 		}
 
 		void BuildFieldEditors(SerializedProperty nodeProperty)

@@ -7,7 +7,7 @@
 A simplified, code-first node network for generating meshes in Unity, in the Editor or at runtime - edited as a
 visual node graph.
 
-A `GeoGraph` is a bag of **GeoNode**s (generators, modifiers, scatter/copy, merge) wired together by edges; each
+A `GeoGraph` is a collection of **GeoNode**s (generators, modifiers, scatter/copy, merge) wired together by edges; each
 node pulls its input(s) - a shared `GeoData` (points + polygon primitives) - from whatever's connected to its input
 port(s), and the result is baked into a `Mesh` at the end. Edit the graph visually in the **Nodra Graph** window.
 
@@ -15,9 +15,15 @@ port(s), and the result is baked into a `Mesh` at the end. Edit the graph visual
 
 - **Generators** — `GridGeneratorNode`, `BoxGeneratorNode`, `SphereGeneratorNode` (UV sphere),
   `CylinderGeneratorNode` (also a cone/frustum via `RadiusTop`/`RadiusBottom`), `TorusGeneratorNode`,
-  `LineGeneratorNode` (points only, no faces - feed it into `CopyToPointsNode` for fences/columns/stepping stones;
-  set it as Output directly and (like `ScatterNode` below) its points/normals draw as Scene view gizmos)
-- **Modifiers** — `TransformNode`, `NoiseDisplaceNode`, `ExtrudeNode`, `ChamferNode`;
+  `LineGeneratorNode`/`SplineGeneratorNode` (straight line / Catmull-Rom curve through a list of control points -
+  `SplineGeneratorNode`'s own control points always draw as yellow Scene view handles, view-only for now,
+  regardless of the graph's current Output; points only, no faces, feed either into `CopyToPointsNode` for
+  fences/columns/stepping stones along a path; set
+  one as Output directly and, like `ScatterNode` below, its points/normals draw as Scene view gizmos)
+- **Modifiers** — `TransformNode`, `NoiseDisplaceNode`, `ExtrudeNode`, `ChamferNode`, `AutoUVNode` (Triplanar/
+  Spherical/Cylindrical projection - a simple default after a node whose own UVs no longer make sense, not a real
+  unwrap; `Extras/`
+  ships a `Nodra/Checker` URP shader + `M_Checker` material to eyeball the result for stretching/mirroring/seams);
 - **Scatter/copy** — `ScatterNode` + `CopyToPointsNode` (scatter points across a surface, then stamp a mesh at each
   one). `ScatterNode`'s own output is points with no faces - meant to feed `CopyToPointsNode`, not to be the graph's
   output directly, so it bakes into a Mesh with nothing to render; set it as Output anyway (e.g. to check the

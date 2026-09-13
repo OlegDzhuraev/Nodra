@@ -17,16 +17,13 @@
  */
 
 using System;
-using System.Collections.Generic;
 
 namespace Nodra
 {
-	/// <summary> A named visual grouping of nodes in a GeoGraph - purely organizational. Membership is kept by
-	/// GeoNode.Id, same as GeoEdge. </summary>
+	/// <summary> Marks its input as the graph's final mesh - GeoGraph.GetOutputNode() looks for a node of this
+	/// type. </summary>
 	[Serializable]
-	public class GeoGroup
+	public class GeometryOutputNode : GeoNode
 	{
-		public string Title = "New Group";
-		public List<string> NodeIds = new ();
 	}
 }
