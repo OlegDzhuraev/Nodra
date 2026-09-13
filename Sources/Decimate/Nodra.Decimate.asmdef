@@ -1,0 +1,23 @@
+{
+    "name": "Nodra.Decimate",
+    "rootNamespace": "",
+    "references": [
+        "GUID:aa71b7950197c35f9ba4c63e44c99427",
+        "Whinarn.UnityMeshSimplifier.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.whinarn.unitymeshsimplifier",
+            "expression": "",
+            "define": "NODRA_DECIMATE"
+        }
+    ],
+    "noEngineReferences": false
+}

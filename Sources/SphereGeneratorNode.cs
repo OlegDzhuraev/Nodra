@@ -28,6 +28,8 @@ namespace Nodra
 	[Serializable]
 	public class SphereGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public float Radius = 1f;
 
 		/// <summary> x: segments around the equator (longitude); y: rings from pole to pole (latitude). </summary>

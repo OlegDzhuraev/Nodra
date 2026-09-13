@@ -25,5 +25,6 @@ namespace Nodra
 	[Serializable]
 	public class GeometryOutputNode : GeoNode
 	{
+		public override string Category => "Output";
 	}
 }

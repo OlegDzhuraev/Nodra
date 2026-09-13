@@ -28,6 +28,8 @@ namespace Nodra
 	[Serializable]
 	public class LineGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public Vector3 Start = Vector3.zero;
 		public Vector3 End = new (0f, 0f, 10f);
 		[Min(1)] public int PointCount = 10;

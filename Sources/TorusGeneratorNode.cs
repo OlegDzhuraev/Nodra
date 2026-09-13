@@ -27,6 +27,8 @@ namespace Nodra
 	[Serializable]
 	public class TorusGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public float MajorRadius = 1f;
 		public float MinorRadius = 0.25f;
 		[Min(3)] public int MajorSegments = 24;

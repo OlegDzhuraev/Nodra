@@ -11,7 +11,9 @@
         "procedural generation",
         "mesh generation"
     ],
-    "dependencies": {},
+    "dependencies": {
+        "com.whinarn.unitymeshsimplifier": "3.1.1"
+    },
     "repository": {
         "type": "git",
         "url": "https://github.com/OlegDzhuraev/Nodra.git"

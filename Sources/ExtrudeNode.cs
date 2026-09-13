@@ -32,6 +32,8 @@ namespace Nodra
 	[Serializable]
 	public class ExtrudeNode : GeoNode
 	{
+		public override string Category => "Build";
+
 		public float Distance = 1f;
 		public bool CapNewFace = true;
 

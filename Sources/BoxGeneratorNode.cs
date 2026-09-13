@@ -26,6 +26,8 @@ namespace Nodra
 	[Serializable]
 	public class BoxGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public Vector3 Size = Vector3.one;
 
 		public override int InputCount => 0;

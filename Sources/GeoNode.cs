@@ -44,6 +44,16 @@ namespace Nodra
 		/// <summary> Label for input port `index`, shown in the graph editor. </summary>
 		public virtual string GetInputPortName(int index) => InputCount <= 1 ? "In" : $"In {index}";
 
+		/// <summary> Submenu this node type is filed under in the graph editor's "Create Node" menu - purely a
+		/// grouping label, read nowhere else. Defaults to "Modifiers"; override with something more specific
+		/// (see NodraGraphView.CategoryOrder for the established set). </summary>
+		public virtual string Category => "Modifiers";
+
+		/// <summary> Null/empty for none (the default) - otherwise shown as a warning box in the node's own body
+		/// in the graph editor, e.g. DecimateNode surfacing "its optional dependency isn't installed" without
+		/// anyone having to open the Inspector to notice. </summary>
+		public virtual string Warning => null;
+
 		/// <summary> Entry point used by GeoGraph evaluation. The default forwards the first connected input (or
 		/// null, if none) to the single-input overload below - override this instead when a node needs more than
 		/// one input. </summary>

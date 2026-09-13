@@ -27,6 +27,8 @@ namespace Nodra
 	[Serializable]
 	public class MergeNode : GeoNode
 	{
+		public override string Category => "Combine";
+
 		public override int InputCount => 2;
 
 		public override string GetInputPortName(int index) => index == 0 ? "Base" : "Branch";

@@ -32,6 +32,8 @@ namespace Nodra
 	[Serializable]
 	public class ChamferNode : GeoNode
 	{
+		public override string Category => "Build";
+
 		[Min(0f)] public float Distance = 0.05f;
 
 		public override GeoData Process(GeoData input)

@@ -28,6 +28,8 @@ namespace Nodra
 	[Serializable]
 	public class ScatterNode : GeoNode
 	{
+		public override string Category => "Scatter/Copy";
+
 		[Min(1)] public int PointCount = 100;
 		public int RandomSeed;
 

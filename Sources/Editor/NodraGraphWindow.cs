@@ -16,6 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -28,11 +29,15 @@ namespace Nodra
 	/// only one target is bound at a time, re-bound whenever a different generator's button is clicked. </summary>
 	public class NodraGraphWindow : EditorWindow
 	{
+		static readonly Color SceneViewBackgroundColor = new (0.16f, 0.16f, 0.16f);
+
 		[SerializeField] ProceduralMeshGenerator target;
 
 		NodraGraphView graphView;
 		Label targetLabel;
 		Toggle autoGenerateToggle;
+
+		readonly Dictionary<SceneView, (CameraClearFlags clearFlags, Color backgroundColor, bool showSkybox)> sceneViewState = new ();
 
 		public static void Open(ProceduralMeshGenerator generator)
 		{
@@ -45,13 +50,63 @@ namespace Nodra
 		void OnEnable()
 		{
 			Undo.undoRedoPerformed += OnUndoRedoPerformed;
+
+			// The graph is the thing being edited while this window is open - hide the Scene view's built-in
+			// Move/Rotate/Scale gizmo so it can't be dragged by accident.
+			Tools.hidden = true;
+			SceneView.duringSceneGui += ApplySceneViewBackground;
+
 			BuildLayout();
 
 			if (target != null)
 				Bind(target);
 		}
 
-		void OnDisable() => Undo.undoRedoPerformed -= OnUndoRedoPerformed;
+		void OnDisable()
+		{
+			Undo.undoRedoPerformed -= OnUndoRedoPerformed;
+			Tools.hidden = false;
+
+			SceneView.duringSceneGui -= ApplySceneViewBackground;
+			RestoreSceneViewBackgrounds();
+		}
+
+		// Skybox/solid-color background is otherwise only reachable from the Scene view's own Camera overlay, per
+		// SceneView instance - applied every duringSceneGui call (not just once in OnEnable) since that overlay,
+		// or a newly opened Scene view, can otherwise override it while this window stays open.
+		void ApplySceneViewBackground(SceneView sceneView)
+		{
+			var camera = sceneView.camera;
+			if (camera == null)
+				return;
+
+			if (!sceneViewState.ContainsKey(sceneView))
+				sceneViewState[sceneView] = (camera.clearFlags, camera.backgroundColor, sceneView.sceneViewState.showSkybox);
+
+			camera.clearFlags = CameraClearFlags.SolidColor;
+			camera.backgroundColor = SceneViewBackgroundColor;
+			sceneView.sceneViewState.showSkybox = false;
+		}
+
+		void RestoreSceneViewBackgrounds()
+		{
+			foreach (var (sceneView, state) in sceneViewState)
+			{
+				if (sceneView == null)
+					continue;
+
+				if (sceneView.camera != null)
+				{
+					sceneView.camera.clearFlags = state.clearFlags;
+					sceneView.camera.backgroundColor = state.backgroundColor;
+				}
+
+				sceneView.sceneViewState.showSkybox = state.showSkybox;
+				sceneView.Repaint();
+			}
+
+			sceneViewState.Clear();
+		}
 
 		void BuildLayout()
 		{

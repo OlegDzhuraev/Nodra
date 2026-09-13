@@ -29,6 +29,8 @@ namespace Nodra
 	[Serializable]
 	public class SplineGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public List<Vector3> ControlPoints = new ()
 		{
 			new Vector3(0f, 0f, 0f),

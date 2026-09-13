@@ -28,6 +28,8 @@ namespace Nodra
 	[Serializable]
 	public class CylinderGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public float RadiusBottom = 0.5f;
 		public float RadiusTop = 0.5f;
 		public float Height = 2f;

@@ -36,6 +36,8 @@ namespace Nodra
 	[Serializable]
 	public class AutoUVNode : GeoNode
 	{
+		public override string Category => "Color & UV";
+
 		public UVProjection Projection = UVProjection.Triplanar;
 		[Min(0.0001f)] public float Scale = 1f;
 

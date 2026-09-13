@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Experimental.GraphView;
+using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -41,6 +42,7 @@ namespace Nodra
 		Action onGraphChanged;
 
 		bool populating;
+		bool repopulateScheduled;
 
 		public NodraGraphView()
 		{
@@ -102,9 +104,18 @@ namespace Nodra
 		void PopulateCore()
 		{
 			// Plain RemoveElement, not DeleteElements - the latter raises graphViewChanged, which would read this
-			// purely-visual clear as "the user deleted everything" and wipe the underlying GeoGraph.
+			// purely-visual clear as "the user deleted everything" and wipe the underlying GeoGraph. Each old
+			// NodraNodeView is explicitly Unbind()'d first - RemoveElement alone only detaches it visually, its
+			// PropertyFields stay bound to their old (soon stale) SerializedProperty paths otherwise, and Unity
+			// eventually throws ObjectDisposedException trying to resync one of those on a completely unrelated
+			// field's blur.
 			foreach (var element in graphElements.ToList())
+			{
+				if (element is NodraNodeView nodeView)
+					nodeView.Unbind();
+
 				RemoveElement(element);
+			}
 
 			viewsById.Clear();
 
@@ -166,6 +177,27 @@ namespace Nodra
 				view.SetIsOutput(view.Node.Id == outputId);
 		}
 
+		// Fixed order for the "Create Node" submenus - Generators first (the natural start of any new graph),
+		// Combine last (the natural end); a category not listed here (a future node nobody categorized) still
+		// shows up, just after all of these. Node type list has grown past a single flat list being usable at all.
+		static readonly string[] CategoryOrder = { "Generators", "Deform", "Build", "Cleanup", "Color & UV", "Scatter/Copy", "Combine", "Output", "Modifiers" };
+
+		// Every non-abstract GeoNode, one instance each - reused for both the category grouping below and the
+		// InputCount check, instead of the type list being walked (and each type instantiated) twice over.
+		static List<(Type type, GeoNode instance)> AllNodeTypes() =>
+			TypeCache.GetTypesDerivedFrom<GeoNode>()
+				.Where(t => !t.IsAbstract)
+				.Select(t => (type: t, instance: (GeoNode) Activator.CreateInstance(t)))
+				.OrderBy(pair => CategoryRank(pair.instance.Category))
+				.ThenBy(pair => pair.type.Name)
+				.ToList();
+
+		static int CategoryRank(string category)
+		{
+			var index = Array.IndexOf(CategoryOrder, category);
+			return index >= 0 ? index : CategoryOrder.Length;
+		}
+
 		public override void BuildContextualMenu(ContextualMenuPopulateEvent evt)
 		{
 			if (generator == null)
@@ -173,19 +205,8 @@ namespace Nodra
 
 			var position = contentViewContainer.WorldToLocal(evt.mousePosition);
 
-			// Generators (InputCount 0) start a brand new shape rather than act on whatever's upstream - kept in
-			// their own submenu so they don't get lost in the same flat list as every modifier/combine node. Split
-			// into two passes (rather than branching per-type inline) so that submenu consistently lands at the
-			// top of "Create Node", instead of wherever its first alphabetically-sorted type happens to fall.
-			var types = TypeCache.GetTypesDerivedFrom<GeoNode>().Where(t => !t.IsAbstract).OrderBy(t => t.Name).ToList();
-
-			foreach (var type in types)
-				if (((GeoNode) Activator.CreateInstance(type)).InputCount == 0)
-					evt.menu.AppendAction($"Create Node/Generator/{NodraNodeView.GetDisplayName(type)}", _ => CreateNode(type, position));
-
-			foreach (var type in types)
-				if (((GeoNode) Activator.CreateInstance(type)).InputCount != 0)
-					evt.menu.AppendAction($"Create Node/{NodraNodeView.GetDisplayName(type)}", _ => CreateNode(type, position));
+			foreach (var (type, instance) in AllNodeTypes())
+				evt.menu.AppendAction($"Create Node/{instance.Category}/{NodraNodeView.GetDisplayName(type)}", _ => CreateNode(type, position));
 
 			evt.menu.AppendSeparator();
 
@@ -332,15 +353,14 @@ namespace Nodra
 		{
 			var menu = new GenericMenu();
 
-			foreach (var type in TypeCache.GetTypesDerivedFrom<GeoNode>().Where(t => !t.IsAbstract).OrderBy(t => t.Name))
+			foreach (var (type, instance) in AllNodeTypes())
 			{
-				var isGenerator = ((GeoNode) Activator.CreateInstance(type)).InputCount == 0;
-
-				// Dragged out of an output looking for somewhere to plug into - a generator has nowhere for it to go.
-				if (sourceView != null && isGenerator)
+				// Dragged out of an output looking for somewhere to plug into - a generator (InputCount 0) has
+				// nowhere for it to go.
+				if (sourceView != null && instance.InputCount == 0)
 					continue;
 
-				var path = isGenerator ? $"Generator/{NodraNodeView.GetDisplayName(type)}" : NodraNodeView.GetDisplayName(type);
+				var path = $"{instance.Category}/{NodraNodeView.GetDisplayName(type)}";
 
 				menu.AddItem(new GUIContent(path), false, () =>
 				{
@@ -360,6 +380,7 @@ namespace Nodra
 		GraphViewChange OnGraphViewChanged(GraphViewChange change)
 		{
 			var dirty = false;
+			var nodeRemoved = false;
 
 			if (change.edgesToCreate != null)
 				foreach (var edge in change.edgesToCreate)
@@ -367,7 +388,10 @@ namespace Nodra
 
 			if (change.elementsToRemove != null)
 				foreach (var element in change.elementsToRemove)
+				{
+					nodeRemoved |= element is NodraNodeView;
 					dirty |= SyncElementRemoved(element);
+				}
 
 			if (change.movedElements != null)
 				dirty |= SyncElementsMoved(change.movedElements);
@@ -378,6 +402,21 @@ namespace Nodra
 				serializedObject.Update();
 				RefreshOutputHighlight();
 				onGraphChanged?.Invoke();
+			}
+
+			// A removed node shifts every later node's index in Graph.Nodes - every surviving node's fields are
+			// still bound to their old index-based SerializedProperty path (Array.data[N]...), which is now either
+			// wrong or gone. Deferred rather than done inline: GraphView is still mid-way through removing this
+			// change's own elements right after this callback returns, and rebuilding the whole view tree out from
+			// under that would fight it - scheduling it for the next update tick lets that finish first.
+			if (nodeRemoved && !repopulateScheduled)
+			{
+				repopulateScheduled = true;
+				schedule.Execute(() =>
+				{
+					repopulateScheduled = false;
+					Populate();
+				}).ExecuteLater(0);
 			}
 
 			return change;
@@ -410,6 +449,7 @@ namespace Nodra
 					generator.Graph.Nodes.Remove(nodeView.Node);
 					generator.Graph.Edges.RemoveAll(e => e.FromNodeId == nodeView.Node.Id || e.ToNodeId == nodeView.Node.Id);
 					viewsById.Remove(nodeView.Node.Id);
+					nodeView.Unbind();
 					return true;
 
 				case Edge edgeView when edgeView.output?.node is NodraNodeView from && edgeView.input?.node is NodraNodeView to:

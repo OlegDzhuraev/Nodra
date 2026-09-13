@@ -36,6 +36,8 @@ namespace Nodra
 	[Serializable]
 	public class BooleanNode : GeoNode
 	{
+		public override string Category => "Combine";
+
 		public BooleanOperation Operation = BooleanOperation.Union;
 
 		public override int InputCount => 2;

@@ -25,7 +25,8 @@ namespace Nodra
 	/// <summary> Converts a GeoData snapshot into a renderable Unity Mesh, fan-triangulating each primitive.
 	/// Normals are always recalculated on the built mesh rather than trusting GeoData.Normals, since nodes like
 	/// NoiseDisplaceNode move points without keeping normals in sync - GeoData.Normals only needs to stay correct
-	/// long enough for nodes further down the chain (e.g. displacement direction, Copy to Points alignment). </summary>
+	/// long enough for nodes further down the chain (e.g. displacement direction, Copy to Points alignment).
+	/// SmoothByAngleNode's own groups are the one exception, reapplied after the fact - see ApplySmoothGroups. </summary>
 	public static class GeoMeshBuilder
 	{
 		public static Mesh Build(GeoData data, string name = "ProceduralMesh")
@@ -37,13 +38,43 @@ namespace Nodra
 
 			mesh.SetVertices(data.Points);
 			mesh.SetUVs(0, data.Uvs);
+			mesh.SetColors(data.Colors);
 			mesh.SetTriangles(Triangulate(data), 0);
 
 			mesh.RecalculateNormals();
+			ApplySmoothGroups(data, mesh);
 			mesh.RecalculateBounds();
 			mesh.RecalculateTangents();
 
 			return mesh;
+		}
+
+		// RecalculateNormals above works per vertex INDEX, so it can't merge normals across a UV seam's
+		// position-duplicate indices - re-averages just the indices SmoothByAngleNode tagged as one smoothing
+		// group, overriding RecalculateNormals's result only there. A no-op mesh with no SmoothByAngleNode in it.
+		static void ApplySmoothGroups(GeoData data, Mesh mesh)
+		{
+			if (!data.HasAttribute(GeoData.SmoothGroupAttribute))
+				return;
+
+			var normals = mesh.normals;
+			var sums = new Dictionary<int, Vector3>();
+
+			for (var i = 0; i < data.PointCount; i++)
+			{
+				var group = (int) data.GetAttribute(GeoData.SmoothGroupAttribute, i);
+				if (group != 0)
+					sums[group] = sums.TryGetValue(group, out var sum) ? sum + normals[i] : normals[i];
+			}
+
+			for (var i = 0; i < data.PointCount; i++)
+			{
+				var group = (int) data.GetAttribute(GeoData.SmoothGroupAttribute, i);
+				if (group != 0)
+					normals[i] = sums[group].normalized;
+			}
+
+			mesh.SetNormals(normals);
 		}
 
 		static List<int> Triangulate(GeoData data)

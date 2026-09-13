@@ -25,6 +25,8 @@ namespace Nodra
 	[Serializable]
 	public class TransformNode : GeoNode
 	{
+		public override string Category => "Deform";
+
 		public Vector3 Translation;
 		public Vector3 Rotation;
 		public Vector3 Scale = Vector3.one;

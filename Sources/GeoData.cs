@@ -21,14 +21,20 @@ using UnityEngine;
 
 namespace Nodra
 {
-	/// <summary> Intermediate geometry passed between GeoNodes: a flat point cloud plus polygon primitives
-	/// referencing it by index, with per-point float attributes
-	/// nodes can read/write to pass extra data along the chain (density, scale, custom masks, etc). </summary>
+	/// <summary> Intermediate geometry passed between GeoNodes: a flat point cloud (position/normal/UV/vertex
+	/// color) plus polygon primitives referencing it by index, with per-point float attributes nodes can read/write
+	/// to pass extra data along the chain (density, scale, custom masks, etc). </summary>
 	public class GeoData
 	{
+		/// <summary> Well-known per-point attribute SmoothByAngleNode tags a smoothing cluster's points with (0 =
+		/// untagged) - GeoMeshBuilder re-averages Unity's per-index RecalculateNormals within each tagged group
+		/// afterward, since that call can't see that two different indices share one position (a UV seam). </summary>
+		public const string SmoothGroupAttribute = "SmoothGroup";
+
 		public readonly List<Vector3> Points = new ();
 		public readonly List<Vector3> Normals = new ();
 		public readonly List<Vector2> Uvs = new ();
+		public readonly List<Color> Colors = new (); // defaults to white - see AddPoint
 
 		/// <summary> Each primitive is a polygon defined by point indices, walked in order (fan-triangulated on build). </summary>
 		public readonly List<int[]> Primitives = new ();
@@ -37,11 +43,14 @@ namespace Nodra
 
 		public int PointCount => Points.Count;
 
-		public int AddPoint(Vector3 position, Vector3 normal, Vector2 uv)
+		public int AddPoint(Vector3 position, Vector3 normal, Vector2 uv) => AddPoint(position, normal, uv, Color.white);
+
+		public int AddPoint(Vector3 position, Vector3 normal, Vector2 uv, Color color)
 		{
 			Points.Add(position);
 			Normals.Add(normal);
 			Uvs.Add(uv);
+			Colors.Add(color);
 			return Points.Count - 1;
 		}
 
@@ -81,6 +90,7 @@ namespace Nodra
 			clone.Points.AddRange(Points);
 			clone.Normals.AddRange(Normals);
 			clone.Uvs.AddRange(Uvs);
+			clone.Colors.AddRange(Colors);
 
 			foreach (var primitive in Primitives)
 				clone.Primitives.Add((int[]) primitive.Clone());

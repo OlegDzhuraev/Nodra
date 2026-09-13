@@ -19,6 +19,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace Nodra
@@ -35,9 +37,20 @@ namespace Nodra
 		/// with a normal, catchable exception past this point instead of leaving the Editor looking frozen. </summary>
 		static readonly TimeSpan TimeLimit = TimeSpan.FromMinutes(1);
 
-		// Ambient rather than threaded through every CsgTree method call - GeoCsg is only ever used synchronously
-		// from a single thread, and Combine() below is the sole place that starts/clears it, so this never leaks
-		// across unrelated calls the way a real shared/global mutable field normally would.
+		// CsgTree.Build/ClipTo below fan out onto the thread pool for their first few levels, where a BSP tree
+		// from real geometry usually has the most independent work to split across cores - capped depth (at most
+		// 2^6 concurrent branches) rather than the tree's actual depth, so a pathologically unbalanced tree still
+		// can't spawn runaway Tasks; whatever's left past that depth falls back to the existing sequential walk.
+		const int MaxParallelDepth = 6;
+
+		// Below this many polygons, Task-scheduling overhead costs more than the split itself would - not worth
+		// spawning a Task for, just walk it on the current thread instead.
+		const int ParallelPolygonThreshold = 200;
+
+		// Ambient rather than threaded through every CsgTree method call - Combine() below is the sole place
+		// that starts/clears it, before any Task is spawned and after every one of them has been joined, so
+		// there's never a concurrent write while a worker thread might be reading it - only concurrent reads of
+		// the same Stopwatch, which is safe (Elapsed doesn't mutate shared state).
 		static Stopwatch activeStopwatch;
 
 		public static GeoData Union(GeoData a, GeoData b) => Combine(a, b, (treeA, treeB) =>
@@ -80,8 +93,15 @@ namespace Nodra
 
 			try
 			{
-				var treeA = new CsgTree(ToPolygons(a));
-				var treeB = new CsgTree(ToPolygons(b));
+				// The two operands' polygon lists don't depend on each other at all, so building them is free to
+				// run in parallel - cheap to set up and, for two large meshes, a real (if usually small next to
+				// the tree operations themselves) head start.
+				var polygonsBTask = Task.Run(() => ToPolygons(b));
+				var polygonsA = ToPolygons(a);
+				var polygonsB = WaitFlattened(polygonsBTask);
+
+				var treeA = new CsgTree(polygonsA);
+				var treeB = new CsgTree(polygonsB);
 
 				operate(treeA, treeB);
 
@@ -92,6 +112,35 @@ namespace Nodra
 				// Restored rather than just cleared to null, in case a caller ever nests a Combine() inside
 				// another node's evaluation that's itself inside a Combine() - unlikely today, but free to keep safe.
 				activeStopwatch = outerStopwatch;
+			}
+		}
+
+		// Task.Wait()/.Result wrap any exception (including CheckTimeout()'s plain TimeoutException, thrown from
+		// inside a parallel branch) in an AggregateException - unwrapped back to the original here, with its
+		// original stack trace preserved, so ProceduralMeshGenerator's `catch (TimeoutException)` still catches it
+		// exactly as it did before any of this ran in parallel.
+		static void WaitFlattened(Task task)
+		{
+			try
+			{
+				task.Wait();
+			}
+			catch (AggregateException ex)
+			{
+				ExceptionDispatchInfo.Capture(ex.Flatten().InnerExceptions[0]).Throw();
+			}
+		}
+
+		static T WaitFlattened<T>(Task<T> task)
+		{
+			try
+			{
+				return task.Result;
+			}
+			catch (AggregateException ex)
+			{
+				ExceptionDispatchInfo.Capture(ex.Flatten().InnerExceptions[0]).Throw();
+				return default; // unreachable - Throw() above never returns, but the compiler can't know that
 			}
 		}
 
@@ -350,7 +399,41 @@ namespace Nodra
 
 			/// <summary> Removes every part of this tree's polygons that lies inside `other`'s solid - the core
 			/// clipping step shared by all three operations. </summary>
-			public void ClipTo(CsgTree other)
+			public void ClipTo(CsgTree other) => ClipTo(other, 0);
+
+			// Below MaxParallelDepth, frontTree and backTree are clipped independently - the two subtrees never
+			// touch each other's fields, only their own, so there's nothing to synchronize. Falls back to the
+			// sequential walk past that depth.
+			void ClipTo(CsgTree other, int depth)
+			{
+				if (depth >= MaxParallelDepth)
+				{
+					ClipToSequential(other);
+					return;
+				}
+
+				CheckTimeout();
+
+				var kept = other.ClipPolygons(polygons);
+				polygons.Clear();
+				polygons.AddRange(kept);
+
+				Task frontTask = null;
+
+				if (frontTree != null)
+				{
+					var capturedFront = frontTree;
+					frontTask = Task.Run(() => capturedFront.ClipTo(other, depth + 1));
+				}
+
+				if (backTree != null)
+					backTree.ClipTo(other, depth + 1);
+
+				if (frontTask != null)
+					WaitFlattened(frontTask);
+			}
+
+			void ClipToSequential(CsgTree other)
 			{
 				var pending = new Stack<CsgTree>();
 				pending.Push(this);
@@ -394,7 +477,45 @@ namespace Nodra
 				return result;
 			}
 
-			public void Build(List<CsgPolygon> input)
+			public void Build(List<CsgPolygon> input) => Build(input, 0);
+
+			// Same depth-capped fan-out as ClipTo above: below MaxParallelDepth and ParallelPolygonThreshold,
+			// splits this node's own input, then builds frontTree/backTree independently - neither touches the
+			// other's fields, so no synchronization is needed beyond joining the Task before returning.
+			void Build(List<CsgPolygon> input, int depth)
+			{
+				if (depth >= MaxParallelDepth || input.Count < ParallelPolygonThreshold)
+				{
+					BuildSequential(input);
+					return;
+				}
+
+				CheckTimeout();
+
+				plane ??= input[0].Plane;
+
+				var frontPolygons = new List<CsgPolygon>();
+				var backPolygons = new List<CsgPolygon>();
+
+				foreach (var polygon in input)
+					plane.Value.Split(polygon, polygons, polygons, frontPolygons, backPolygons);
+
+				Task frontTask = null;
+
+				if (frontPolygons.Count > 0)
+				{
+					var capturedFront = frontTree ??= new CsgTree();
+					frontTask = Task.Run(() => capturedFront.Build(frontPolygons, depth + 1));
+				}
+
+				if (backPolygons.Count > 0)
+					(backTree ??= new CsgTree()).Build(backPolygons, depth + 1);
+
+				if (frontTask != null)
+					WaitFlattened(frontTask);
+			}
+
+			void BuildSequential(List<CsgPolygon> input)
 			{
 				var pending = new Stack<(CsgTree node, List<CsgPolygon> polygons)>();
 				pending.Push((this, input));

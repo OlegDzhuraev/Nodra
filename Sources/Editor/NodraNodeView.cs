@@ -50,8 +50,11 @@ namespace Nodra
 			// Node's default USS gives the card a semi-transparent background - fine over a plain grid, but
 			// distracting once nodes overlap/stack, so it's forced opaque here. Widened past Node's fairly narrow
 			// default too, since a Vector2/Vector3 field's sub-fields (Offset's X/Y, ...) get squeezed unreadably
-			// thin otherwise - see also the label-width rule in NodraGraphView.uss.
+			// thin otherwise - see also the label-width rule in NodraGraphView.uss. Capped on the other end so a
+			// long GeoNode.Warning string (which wraps, see BuildWarning) can't stretch the card out sideways
+			// instead of just growing taller.
 			style.minWidth = 260f;
+			style.maxWidth = 320f;
 			var opaqueBackground = new Color(0.13f, 0.13f, 0.13f, 1f);
 			mainContainer.style.backgroundColor = opaqueBackground;
 			extensionContainer.style.backgroundColor = opaqueBackground;
@@ -95,6 +98,7 @@ namespace Nodra
 			OutputPort.portName = "Out";
 			outputContainer.Add(OutputPort);
 
+			BuildWarning(node);
 			BuildFieldEditors(nodeProperty);
 
 			SetPosition(new Rect(node.Position, Vector2.zero));
@@ -114,6 +118,19 @@ namespace Nodra
 			var display = isOutput ? DisplayStyle.Flex : DisplayStyle.None;
 			outputBadge.style.display = display;
 			outputOutline.style.display = display;
+		}
+
+		// GeoNode.Warning is null for the overwhelming majority of nodes - only ones like DecimateNode, whose
+		// optional dependency might be missing, override it, so this stays a no-op for everything else.
+		void BuildWarning(GeoNode node)
+		{
+			if (string.IsNullOrEmpty(node.Warning))
+				return;
+
+			// Wraps instead of forcing the node wider to fit one long line - maxWidth above caps it, but without
+			// this the HelpBox's own label would rather overflow than respect that.
+			var warning = new HelpBox(node.Warning, HelpBoxMessageType.Warning) { style = { whiteSpace = WhiteSpace.Normal } };
+			extensionContainer.Add(warning);
 		}
 
 		void BuildFieldEditors(SerializedProperty nodeProperty)

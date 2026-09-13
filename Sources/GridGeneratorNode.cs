@@ -26,6 +26,8 @@ namespace Nodra
 	[Serializable]
 	public class GridGeneratorNode : GeoNode
 	{
+		public override string Category => "Generators";
+
 		public Vector2 Size = new (10f, 10f);
 		public Vector2Int Resolution = new (10, 10);
 

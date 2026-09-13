@@ -26,6 +26,8 @@ namespace Nodra
 	[Serializable]
 	public class CopyToPointsNode : GeoNode
 	{
+		public override string Category => "Scatter/Copy";
+
 		public Mesh SourceMesh;
 		public bool AlignToNormal = true;
 		public float RandomYRotation = 360f;
