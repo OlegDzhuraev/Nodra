@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Extras/Repo/nodra_logo.png" alt="Nodra" width="300">
+  <img src="Extras/Repo/nodra_logo.png" alt="Nodra" width="240">
 </p>
 
 # Nodra
