@@ -15,7 +15,7 @@ port(s), and the result is baked into a `Mesh` at the end. Edit the graph visual
 
 ## Nodes
 
-###### Generators
+#### Generators
 
 - `GridGeneratorNode` — a flat, subdivided plane
 - `HeightMapGeneratorNode` — a terrain-like plane shaped by a heightmap texture
@@ -28,35 +28,41 @@ port(s), and the result is baked into a `Mesh` at the end. Edit the graph visual
 - `LineGeneratorNode` — a straight line of points
 - `SplineGeneratorNode` — a smooth curved path of points, editable directly in the Scene view
 
-###### Modifiers
+#### Modifiers
 
 - `TransformNode` — moves, rotates and scales the mesh
 - `NoiseDisplaceNode` — roughens the surface with noise
 - `ExtrudeNode` — pushes the surface outward into a solid shape
 - `ChamferNode` — softens sharp edges with a small bevel
-- `SmoothByAngleNode` — smooths or facets shading based on edge angle
 - `TubeNode` — wraps a tube or beam around a path
 - `ArrayNode` — repeats the mesh in a row, ring or spiral
-- `VertexColorNode` — paints the mesh with a flat color or gradient
 - `MirrorNode` — mirrors the mesh across an axis
-- `FlipNormalsNode` — turns the mesh inside out
-- `WeldNode` — merges nearby duplicate points together
 - `TaperNode` — narrows or widens the mesh along an axis
 - `BendNode` — curves the mesh into an arc
 - `TwistNode` — twists the mesh around an axis
 - `RelaxNode` — smooths out jagged geometry
 - `SubdivideNode` — adds extra detail to the mesh
-- `CapHolesNode` — fills open holes in the mesh
 - `FaceFilterNode` — removes faces facing a chosen direction
 - `DecimateNode` — reduces the mesh's triangle count (needs an optional extra package)
-- `AutoUVNode` — generates simple UVs automatically
 
-###### Scatter/copy
+#### Geometry fixers
+
+- `FlipNormalsNode` — turns the mesh inside out
+- `WeldNode` — merges nearby duplicate points together
+- `SmoothByAngleNode` — smooths or facets shading based on edge angle
+- `CapHolesNode` — fills open holes in the mesh
+
+#### Color/UV
+
+- `AutoUVNode` — generates simple UVs automatically
+- `VertexColorNode` — paints the mesh with a flat color or gradient
+
+#### Scatter/copy
 
 - `ScatterNode` — scatters points across a surface
 - `CopyToPointsNode` — stamps a mesh at each scattered point
 
-###### Combine
+#### Combine
 
 - `MergeNode` — combines two meshes into one
 - `BooleanNode` — cuts or combines two shapes like real solids
@@ -79,9 +85,6 @@ normal (shows the `Mesh.normals` the renderer uses) - useful for checking a gene
 result as a `.asset` file, so it survives as a normal project asset instead of only living as an in-memory Mesh on
 the MeshFilter.
 
-To add your own node, derive from `GeoNode` and implement `Process(GeoData input)` (or `Process(GeoData[] inputs)`
-for more than one input port) - it'll automatically show up in the graph's "Create Node" menu, filed under
-whichever submenu its `Category` override names (defaults to "Modifiers" if you don't override it).
 
 ### Optional: DecimateNode
 
@@ -94,6 +97,12 @@ console warning about the unresolved package reference).
 
 To install: **Window → Package Manager → + → Install package from git URL...** and paste
 `https://github.com/Whinarn/UnityMeshSimplifier.git`.
+
+## Creating custom nodes
+
+To add your own node, derive from `GeoNode` and implement `Process(GeoData input)` (or `Process(GeoData[] inputs)`
+for more than one input port) - it'll automatically show up in the graph's "Create Node" menu, filed under
+whichever submenu its `Category` override names (defaults to "Modifiers" if you don't override it).
 
 ```cs
 using Nodra;
