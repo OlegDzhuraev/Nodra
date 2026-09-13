@@ -107,28 +107,42 @@ namespace Nodra
 			Handles.color = previousColor;
 		}
 
-		// Drawn for every SplineGeneratorNode in the graph regardless of which one is the current Output - control
-		// points are authored data on the node itself, not part of any evaluated GeoData, so you can see/drag the
-		// curve's shape in the Scene view even while something further downstream is what actually gets generated.
-		static void DrawSplineControlPoints(ProceduralMeshGenerator generator)
+		// Drawn (and draggable) for every SplineGeneratorNode in the graph regardless of which one is the current
+		// Output - control points are authored data on the node itself, not part of any evaluated GeoData, so you
+		// can see/drag the curve's shape in the Scene view even while something further downstream is what
+		// actually gets generated. Dragged through SerializedProperty rather than the live field directly, same as
+		// every other node field edited from NodraGraphView - gets Undo and the AutoGenerate/OnValidate path for free.
+		void DrawSplineControlPoints(ProceduralMeshGenerator generator)
 		{
 			if (generator.Graph?.Nodes == null)
 				return;
 
+			serializedObject.Update();
+			var nodesProperty = serializedObject.FindProperty(nameof(ProceduralMeshGenerator.Graph)).FindPropertyRelative(nameof(GeoGraph.Nodes));
+
 			var previousColor = Handles.color;
 			Handles.color = ControlPointColor;
 
-			foreach (var node in generator.Graph.Nodes)
+			for (var nodeIndex = 0; nodeIndex < generator.Graph.Nodes.Count; nodeIndex++)
 			{
-				if (node is not SplineGeneratorNode spline || spline.ControlPoints == null || spline.ControlPoints.Count == 0)
+				if (generator.Graph.Nodes[nodeIndex] is not SplineGeneratorNode spline || spline.ControlPoints == null || spline.ControlPoints.Count == 0)
 					continue;
 
-				foreach (var point in spline.ControlPoints)
+				var controlPointsProperty = nodesProperty.GetArrayElementAtIndex(nodeIndex).FindPropertyRelative(nameof(SplineGeneratorNode.ControlPoints));
+
+				for (var i = 0; i < spline.ControlPoints.Count; i++)
 				{
-					var worldPosition = generator.transform.TransformPoint(point);
+					var worldPosition = generator.transform.TransformPoint(spline.ControlPoints[i]);
 					var size = HandleUtility.GetHandleSize(worldPosition) * 0.05f;
 
-					Handles.SphereHandleCap(0, worldPosition, Quaternion.identity, size, EventType.Repaint);
+					EditorGUI.BeginChangeCheck();
+					var moved = Handles.FreeMoveHandle(worldPosition, size, Vector3.zero, Handles.SphereHandleCap);
+
+					if (EditorGUI.EndChangeCheck())
+					{
+						controlPointsProperty.GetArrayElementAtIndex(i).vector3Value = generator.transform.InverseTransformPoint(moved);
+						serializedObject.ApplyModifiedProperties();
+					}
 				}
 
 				var count = spline.ControlPoints.Count;
