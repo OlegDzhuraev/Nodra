@@ -46,6 +46,17 @@ namespace Nodra
 			viewDataKey = node.Id;
 			title = GetDisplayName(node.GetType());
 
+			// Node's default USS gives the card a semi-transparent background - fine over a plain grid, but
+			// distracting once nodes overlap/stack, so it's forced opaque here. Widened past Node's fairly narrow
+			// default too, since a Vector2/Vector3 field's sub-fields (Offset's X/Y, ...) get squeezed unreadably
+			// thin otherwise - see also the label-width rule in NodraGraphView.uss.
+			style.minWidth = 260f;
+			var opaqueBackground = new Color(0.13f, 0.13f, 0.13f, 1f);
+			mainContainer.style.backgroundColor = opaqueBackground;
+			extensionContainer.style.backgroundColor = opaqueBackground;
+
+			extensionContainer.AddToClassList("nodra-node-fields");
+
 			var enabledToggle = new Toggle { tooltip = "Enabled" };
 			enabledToggle.BindProperty(nodeProperty.FindPropertyRelative("Enabled"));
 			titleButtonContainer.Add(enabledToggle);
@@ -69,15 +80,17 @@ namespace Nodra
 			var inputCount = Mathf.Max(node.InputCount, 0);
 			InputPorts = new Port[inputCount];
 
+			// NodraPort.Create (not the inherited InstantiatePort) - only it lets a drag that ends on empty canvas
+			// reach NodraGraphView.OnDropOutsidePort instead of silently doing nothing.
 			for (var i = 0; i < inputCount; i++)
 			{
-				var port = InstantiatePort(Orientation.Horizontal, Direction.Input, Port.Capacity.Single, typeof(GeoData));
+				var port = NodraPort.Create(Orientation.Horizontal, Direction.Input, Port.Capacity.Single, typeof(GeoData), owner);
 				port.portName = node.GetInputPortName(i);
 				InputPorts[i] = port;
 				inputContainer.Add(port);
 			}
 
-			OutputPort = InstantiatePort(Orientation.Horizontal, Direction.Output, Port.Capacity.Multi, typeof(GeoData));
+			OutputPort = NodraPort.Create(Orientation.Horizontal, Direction.Output, Port.Capacity.Multi, typeof(GeoData), owner);
 			OutputPort.portName = "Out";
 			outputContainer.Add(OutputPort);
 

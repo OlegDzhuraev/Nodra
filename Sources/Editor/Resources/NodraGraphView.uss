@@ -1,0 +1,42 @@
+/*
+ * Nodra
+ * Copyright (C) 2026 Oleg Dzhuraev <godlikeaurora@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/* GridBackground's own USS class name changed between Unity versions ("grid-background" -> "unity-grid-background"),
+   so #nodra-grid-background (the name NodraGraphView assigns it in code) is the one selector guaranteed to match
+   regardless of Unity version - the two class selectors are kept alongside it just in case. */
+#nodra-grid-background,
+.grid-background,
+.unity-grid-background {
+    --grid-background-color: #1c1c1c;
+    --line-color: rgba(255, 255, 255, 0.05);
+    --thick-line-color: rgba(255, 255, 255, 0.1);
+    --spacing: 25;
+}
+
+/* NodraNodeView tags its field container with this class. Every built-in field (FloatField, Vector2Field,
+   Toggle, ...) uses this same "unity-base-field__label" class - including each of a Vector2/Vector3's own
+   inner X/Y/Z sub-fields, which already default to a small, correctly-sized label on their own. max-width (not
+   width/min-width - that was the bug: it forced X/Y's already-tiny labels wide too, leaving nothing for their
+   actual input boxes) only caps labels that would otherwise be wider than that, i.e. just the outer ones
+   ("Amplitude", "Offset", "Along Normal", ...), which is what actually needed the room given back to the field. */
+.nodra-node-fields .unity-base-field__label {
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

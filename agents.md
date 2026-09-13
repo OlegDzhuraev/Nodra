@@ -28,10 +28,13 @@ Sources/
   GeoNode.cs             abstract base: Id/Position (graph bookkeeping), InputCount, Process(GeoData[]) -> GeoData
   GeoEdge.cs             one connection: FromNodeId -> ToNodeId's ToPortIndex
   GeoGraph.cs            [SerializeReference] node list + edges; Evaluate() topologically pulls from the output node
-  *GeneratorNode.cs      Grid, Box - InputCount 0, ignore input, add fresh geometry
+  *GeneratorNode.cs      Grid, Box, Sphere, Cylinder (also cone/frustum), Torus - InputCount 0, add fresh geometry
+  LineGeneratorNode.cs   InputCount 0, points only (no primitives) - see ScatterNode below
   TransformNode.cs, NoiseDisplaceNode.cs, ExtrudeNode.cs  - modifiers, mutate what they receive
   ScatterNode.cs, CopyToPointsNode.cs                     - scatter points across a surface, then stamp a mesh at each
   MergeNode.cs           InputCount 2 ("Base"/"Branch") - appends the branch's geometry into the base
+  BooleanNode.cs         InputCount 2 ("A"/"B") - real CSG Union/Subtract/Intersect, delegates to GeoCsg
+  GeoCsg.cs              BSP-tree CSG engine (Union/Subtract/Intersect on GeoData) backing BooleanNode
   GeoMeshBuilder.cs      GeoData -> Unity Mesh (fan-triangulates, always recalculates normals)
   ProceduralMeshGenerator.cs   MonoBehaviour: runs Graph.Evaluate(), bakes into the attached MeshFilter
   Editor/
@@ -39,7 +42,11 @@ Sources/
     NodraGraphWindow.cs        EditorWindow: toolbar (target, Auto Generate, Generate) + NodraGraphView
     NodraGraphView.cs          GraphView: builds node/edge views from GeoGraph, writes edits back via Undo.RecordObject
     NodraNodeView.cs           Node: ports from GeoNode.InputCount, fields bound straight to SerializedProperty
+    NodraPort.cs               Port subclass reaching Port's protected ctor - only way to attach our own
+                               IEdgeConnectorListener instead of Port's hardcoded default one
     ProceduralMeshGeneratorEditor.cs   AutoGenerate toggle, "Open Graph Editor" button, Generate/Save Mesh buttons
+    Resources/
+      NodraGraphView.uss       GridBackground colors - loaded via Resources.Load, not a hard asset reference
 ```
 
 ## Assembly Definitions

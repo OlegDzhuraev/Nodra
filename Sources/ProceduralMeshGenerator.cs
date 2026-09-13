@@ -16,6 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+using System;
 using UnityEngine;
 
 namespace Nodra
@@ -35,13 +36,35 @@ namespace Nodra
 
 		MeshFilter meshFilter;
 
+		/// <summary> The GeoData Generate() last evaluated, kept around purely so ProceduralMeshGeneratorEditor can
+		/// draw it as gizmos (e.g. ScatterNode's points, invisible in the baked Mesh since it has no faces) without
+		/// re-evaluating the whole graph every OnSceneGUI call. Not meant for anything else - it's not cleared when
+		/// the graph changes without a Generate(), so it can briefly go stale between an edit and the next bake. </summary>
+		public GeoData LastEvaluatedData { get; private set; }
+
 		[ContextMenu("Generate")]
 		public void Generate()
 		{
 			if (!meshFilter)
 				meshFilter = GetComponent<MeshFilter>();
 
-			var data = Graph.Evaluate();
+			GeoData data;
+
+			try
+			{
+				data = Graph.Evaluate();
+			}
+			catch (TimeoutException e)
+			{
+				// GeoCsg (BooleanNode) is the only node that can throw this - a controlled abort instead of the
+				// stack overflow a runaway BSP-tree CSG used to cause on heavy/pathological input. The previous
+				// mesh (and LastEvaluatedData) are left exactly as they were rather than cleared, so one failed
+				// regeneration doesn't also blank out whatever was already there.
+				Debug.LogError(e.Message, this);
+				return;
+			}
+
+			LastEvaluatedData = data;
 
 			meshFilter.sharedMesh = data != null ? GeoMeshBuilder.Build(data, gameObject.name) : null;
 		}

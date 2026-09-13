@@ -42,13 +42,60 @@ namespace Nodra
 			using (new EditorGUILayout.HorizontalScope())
 			{
 				if (GUILayout.Button("Generate"))
+				{
 					foreach (var generator in targets)
 						((ProceduralMeshGenerator) generator).Generate();
+
+					SelectAndFrame(targets);
+				}
 
 				if (GUILayout.Button("Save Mesh to Project..."))
 					foreach (var generator in targets)
 						SaveMeshToProject((ProceduralMeshGenerator) generator);
 			}
+		}
+
+		// Jumps the Scene view to whatever was just (re)generated - Generate is usually clicked right after tweaking
+		// a node whose result might now sit far from the current view (a big Transform offset, a fresh generator
+		// placed elsewhere, ...), so this saves a manual hunt for it.
+		static void SelectAndFrame(Object[] targets)
+		{
+			var gameObjects = new Object[targets.Length];
+			for (var i = 0; i < targets.Length; i++)
+				gameObjects[i] = ((ProceduralMeshGenerator) targets[i]).gameObject;
+
+			Selection.objects = gameObjects;
+			SceneView.lastActiveSceneView?.FrameSelected();
+		}
+
+		// A point-cloud result (ScatterNode's/LineGeneratorNode's typical output - or any other node whose result
+		// happens to have points but no faces) bakes into a Mesh with vertices but zero triangles - nothing to see
+		// there, so its points are drawn directly in the Scene view instead. Judged purely by the data's own shape,
+		// not by which node produced it, so this covers any such node without needing to know about it by name;
+		// a real mesh already shows itself and doesn't need this.
+		void OnSceneGUI()
+		{
+			var generator = (ProceduralMeshGenerator) target;
+			var data = generator.LastEvaluatedData;
+
+			if (data == null || data.PointCount == 0 || data.Primitives.Count > 0)
+				return;
+
+			var previousColor = Handles.color;
+			Handles.color = new Color(0.3f, 0.85f, 1f, 0.9f);
+
+			for (var i = 0; i < data.PointCount; i++)
+			{
+				var worldPosition = generator.transform.TransformPoint(data.Points[i]);
+				var size = HandleUtility.GetHandleSize(worldPosition) * 0.05f;
+
+				Handles.SphereHandleCap(0, worldPosition, Quaternion.identity, size, EventType.Repaint);
+
+				if (i < data.Normals.Count)
+					Handles.DrawLine(worldPosition, worldPosition + generator.transform.TransformDirection(data.Normals[i]) * (size * 6f));
+			}
+
+			Handles.color = previousColor;
 		}
 
 		// Regenerates first, so the saved asset always matches the graph's current settings even if the user

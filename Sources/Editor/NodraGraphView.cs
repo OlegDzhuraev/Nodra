@@ -32,7 +32,7 @@ namespace Nodra
 	/// Inspector edit (Undo, prefab overrides, multi-scene). Beyond syncing that data, most edits are left for
 	/// GraphView's own default behaviour to apply visually (adding the new edge, removing a deleted node's
 	/// elements, ...) - forcing a full re-population there too would fight GraphView's own bookkeeping. </summary>
-	public class NodraGraphView : GraphView
+	public class NodraGraphView : GraphView, IEdgeConnectorListener
 	{
 		readonly Dictionary<string, NodraNodeView> viewsById = new ();
 
@@ -49,11 +49,26 @@ namespace Nodra
 			this.AddManipulator(new RectangleSelector());
 			this.AddManipulator(new ContentZoomer());
 
-			var grid = new GridBackground();
+			// Safety-net fill in case the stylesheet below fails to load - GridBackground's own fill (from
+			// --grid-background-color) should normally cover the whole canvas on top of this.
+			style.backgroundColor = new Color(0.16f, 0.16f, 0.16f);
+
+			// GridBackground reads its line/fill colors from USS custom properties and otherwise falls back to
+			// Unity's own (fairly subtle, easy to miss) defaults - Resources/NodraGraphView.uss defines them
+			// explicitly, targeted at the name assigned to the grid below so it applies regardless of Unity version.
+			var stylesheet = Resources.Load<StyleSheet>("NodraGraphView");
+			if (stylesheet != null)
+				styleSheets.Add(stylesheet);
+
+			var grid = new GridBackground { name = "nodra-grid-background" };
 			Insert(0, grid);
 			grid.StretchToParentSize();
 
 			graphViewChanged = OnGraphViewChanged;
+
+			serializeGraphElements = SerializeSelection;
+			canPasteSerializedData = data => !string.IsNullOrEmpty(data);
+			unserializeAndPaste = UnserializeAndPaste;
 		}
 
 		public void Bind(ProceduralMeshGenerator target, Action onChanged)
@@ -104,6 +119,13 @@ namespace Nodra
 				AddElement(from.OutputPort.ConnectTo(to.InputPorts[edge.ToPortIndex]));
 			}
 
+			// Each NodraNodeView calls RefreshPorts() once in its own constructor, before any of the edges above
+			// exist yet - so the very first time a port gets connected, its connector dot can be left showing
+			// "disconnected" until something else happens to refresh it. Doing it again now, after every edge for
+			// every node is in place, keeps that visual in sync with the connections actually just made.
+			foreach (var view in viewsById.Values)
+				view.RefreshPorts();
+
 			RefreshOutputHighlight();
 		}
 
@@ -150,13 +172,19 @@ namespace Nodra
 
 			var position = contentViewContainer.WorldToLocal(evt.mousePosition);
 
-			foreach (var type in TypeCache.GetTypesDerivedFrom<GeoNode>().OrderBy(t => t.Name))
-			{
-				if (type.IsAbstract)
-					continue;
+			// Generators (InputCount 0) start a brand new shape rather than act on whatever's upstream - kept in
+			// their own submenu so they don't get lost in the same flat list as every modifier/combine node. Split
+			// into two passes (rather than branching per-type inline) so that submenu consistently lands at the
+			// top of "Create Node", instead of wherever its first alphabetically-sorted type happens to fall.
+			var types = TypeCache.GetTypesDerivedFrom<GeoNode>().Where(t => !t.IsAbstract).OrderBy(t => t.Name).ToList();
 
-				evt.menu.AppendAction($"Create Node/{NodraNodeView.GetDisplayName(type)}", _ => CreateNode(type, position));
-			}
+			foreach (var type in types)
+				if (((GeoNode) Activator.CreateInstance(type)).InputCount == 0)
+					evt.menu.AppendAction($"Create Node/Generator/{NodraNodeView.GetDisplayName(type)}", _ => CreateNode(type, position));
+
+			foreach (var type in types)
+				if (((GeoNode) Activator.CreateInstance(type)).InputCount != 0)
+					evt.menu.AppendAction($"Create Node/{NodraNodeView.GetDisplayName(type)}", _ => CreateNode(type, position));
 
 			evt.menu.AppendSeparator();
 			base.BuildContextualMenu(evt);
@@ -165,9 +193,18 @@ namespace Nodra
 		public override List<Port> GetCompatiblePorts(Port startPort, NodeAdapter nodeAdapter) =>
 			ports.ToList().Where(p => p.direction != startPort.direction && p.node != startPort.node).ToList();
 
-		// Runs outside any GraphView-driven transaction (it's a direct context-menu action), so a full repopulate
-		// here is safe - nothing else is about to touch the view tree afterwards the way it would mid-graphViewChanged.
-		void CreateNode(Type type, Vector2 position)
+		// Runs outside any GraphView-driven transaction (it's a direct context-menu action, or the node-search menu
+		// below), so a full repopulate here is safe - nothing else is about to touch the view tree afterwards the
+		// way it would mid-graphViewChanged.
+		void CreateNode(Type type, Vector2 position) => CreateNode(type, position, null, null, -1);
+
+		void CreateNodeConnectedFromOutput(Type type, Vector2 position, NodraNodeView sourceView) =>
+			CreateNode(type, position, sourceView, null, -1);
+
+		void CreateNodeConnectedToInput(Type type, Vector2 position, NodraNodeView targetView, int targetPortIndex) =>
+			CreateNode(type, position, null, targetView, targetPortIndex);
+
+		void CreateNode(Type type, Vector2 position, NodraNodeView sourceView, NodraNodeView targetView, int targetPortIndex)
 		{
 			Undo.RecordObject(generator, "Add Node");
 
@@ -175,9 +212,88 @@ namespace Nodra
 			node.Position = position;
 			generator.Graph.Nodes.Add(node);
 
+			// Dragged out of sourceView's output - wire it into the new node's first input, if it has one
+			// (a Generator dragged this way never does, but the search menu already excludes those in that case).
+			if (sourceView != null && node.InputCount > 0)
+				generator.Graph.Edges.Add(new GeoEdge { FromNodeId = sourceView.Node.Id, ToNodeId = node.Id, ToPortIndex = 0 });
+
+			// Dragged out of targetView's input (backwards, looking for a source) - wire the new node's output into it.
+			if (targetView != null)
+				generator.Graph.Edges.Add(new GeoEdge { FromNodeId = node.Id, ToNodeId = targetView.Node.Id, ToPortIndex = targetPortIndex });
+
 			EditorUtility.SetDirty(generator);
 			Populate();
 			onGraphChanged?.Invoke();
+		}
+
+		// IEdgeConnectorListener - installed on every port (see NodraPort) instead of Port's own default listener,
+		// purely to get a hook for the "dropped on empty canvas" case below. This has to fully reproduce what that
+		// default listener does for a normal drop onto a compatible port, though, since replacing it means nothing
+		// else calls graphViewChanged for a drag-made connection any more: it's what invokes OnGraphViewChanged /
+		// SyncEdgeCreated below, which is what actually writes the edge into GeoGraph.Edges - skip it (as an
+		// earlier version of this method did) and the connection is purely a visual Edge with no data behind it,
+		// discarded the moment anything else triggers a repopulate. Connect() on both ports is what fills in each
+		// port's connector dot, otherwise cosmetically indistinguishable from a disconnected one.
+		public void OnDrop(GraphView graphView, Edge edge)
+		{
+			var change = new GraphViewChange { edgesToCreate = new List<Edge> { edge } };
+			var edgesToCreate = graphViewChanged != null ? graphViewChanged(change).edgesToCreate : change.edgesToCreate;
+
+			foreach (var created in edgesToCreate)
+			{
+				created.input.Connect(created);
+				created.output.Connect(created);
+				graphView.AddElement(created);
+			}
+
+			edge.input?.node?.RefreshPorts();
+			edge.output?.node?.RefreshPorts();
+		}
+
+		// The dragged edge still has whichever end it started from set (output XOR input) and the other left null -
+		// that tells us which direction to search: dragged from an output needs a node with an input to plug into,
+		// dragged from an input (backwards) needs a source, which every node has exactly one of.
+		public void OnDropOutsidePort(Edge edge, Vector2 position)
+		{
+			if (generator == null)
+				return;
+
+			var sourceView = edge.output?.node as NodraNodeView;
+			var targetView = edge.input?.node as NodraNodeView;
+
+			if (sourceView == null && targetView == null)
+				return;
+
+			var targetPortIndex = targetView != null ? Array.IndexOf(targetView.InputPorts, edge.input) : -1;
+			var graphPosition = contentViewContainer.WorldToLocal(position);
+
+			ShowNodeSearchMenu(graphPosition, sourceView, targetView, targetPortIndex);
+		}
+
+		void ShowNodeSearchMenu(Vector2 position, NodraNodeView sourceView, NodraNodeView targetView, int targetPortIndex)
+		{
+			var menu = new GenericMenu();
+
+			foreach (var type in TypeCache.GetTypesDerivedFrom<GeoNode>().Where(t => !t.IsAbstract).OrderBy(t => t.Name))
+			{
+				var isGenerator = ((GeoNode) Activator.CreateInstance(type)).InputCount == 0;
+
+				// Dragged out of an output looking for somewhere to plug into - a generator has nowhere for it to go.
+				if (sourceView != null && isGenerator)
+					continue;
+
+				var path = isGenerator ? $"Generator/{NodraNodeView.GetDisplayName(type)}" : NodraNodeView.GetDisplayName(type);
+
+				menu.AddItem(new GUIContent(path), false, () =>
+				{
+					if (sourceView != null)
+						CreateNodeConnectedFromOutput(type, position, sourceView);
+					else
+						CreateNodeConnectedToInput(type, position, targetView, targetPortIndex);
+				});
+			}
+
+			menu.ShowAsContext();
 		}
 
 		// Only syncs GeoGraph's data - the visual side (adding the new edge, removing a deleted node/edge's
@@ -268,6 +384,124 @@ namespace Nodra
 			}
 
 			return any;
+		}
+
+		// Ctrl+C/Ctrl+X hand the current selection to this - GraphView only wires up copy/cut/paste at all once
+		// serializeGraphElements is set, and otherwise ignores those shortcuts entirely. Each selected node is
+		// serialized on its own (via its concrete runtime type - JsonUtility.ToJson(object) uses GetType(), not the
+		// GeoNode-typed reference) since JsonUtility can't handle a heterogeneous List<GeoNode> directly; edges are
+		// kept only when both endpoints are in the copied set, referencing nodes by their *original* Id, remapped
+		// to fresh ones on paste.
+		string SerializeSelection(IEnumerable<GraphElement> elements)
+		{
+			if (generator == null)
+				return string.Empty;
+
+			var payload = new ClipboardPayload();
+			var copiedIds = new HashSet<string>();
+
+			foreach (var element in elements)
+			{
+				if (element is not NodraNodeView view)
+					continue;
+
+				copiedIds.Add(view.Node.Id);
+				payload.Nodes.Add(new ClipboardNode
+				{
+					TypeName = view.Node.GetType().AssemblyQualifiedName,
+					Json = JsonUtility.ToJson(view.Node),
+					OriginalId = view.Node.Id,
+					Position = view.Node.Position,
+				});
+			}
+
+			foreach (var edge in generator.Graph.Edges)
+				if (copiedIds.Contains(edge.FromNodeId) && copiedIds.Contains(edge.ToNodeId))
+					payload.Edges.Add(new ClipboardEdge { FromId = edge.FromNodeId, ToId = edge.ToNodeId, ToPortIndex = edge.ToPortIndex });
+
+			return payload.Nodes.Count > 0 ? JsonUtility.ToJson(payload) : string.Empty;
+		}
+
+		// A fixed nudge (rather than pasting exactly on top of the originals) so the pasted copies are immediately
+		// visible and draggable as their own selection.
+		static readonly Vector2 PasteOffset = new (40f, 40f);
+
+		void UnserializeAndPaste(string operationName, string data)
+		{
+			if (generator == null)
+				return;
+
+			ClipboardPayload payload;
+
+			try
+			{
+				payload = JsonUtility.FromJson<ClipboardPayload>(data);
+			}
+			catch (ArgumentException)
+			{
+				return;
+			}
+
+			if (payload?.Nodes == null || payload.Nodes.Count == 0)
+				return;
+
+			Undo.RecordObject(generator, operationName);
+
+			var idRemap = new Dictionary<string, string>();
+			var pastedIds = new List<string>();
+
+			foreach (var clipboardNode in payload.Nodes)
+			{
+				var type = Type.GetType(clipboardNode.TypeName);
+				if (type == null)
+					continue;
+
+				var node = (GeoNode) JsonUtility.FromJson(clipboardNode.Json, type);
+				node.Id = Guid.NewGuid().ToString("N"); // never collide with the node(s) it was copied from
+				node.Position = clipboardNode.Position + PasteOffset;
+
+				idRemap[clipboardNode.OriginalId] = node.Id;
+				generator.Graph.Nodes.Add(node);
+				pastedIds.Add(node.Id);
+			}
+
+			foreach (var clipboardEdge in payload.Edges)
+				if (idRemap.TryGetValue(clipboardEdge.FromId, out var from) && idRemap.TryGetValue(clipboardEdge.ToId, out var to))
+					generator.Graph.Edges.Add(new GeoEdge { FromNodeId = from, ToNodeId = to, ToPortIndex = clipboardEdge.ToPortIndex });
+
+			EditorUtility.SetDirty(generator);
+			Populate();
+
+			ClearSelection();
+			foreach (var id in pastedIds)
+				if (viewsById.TryGetValue(id, out var view))
+					AddToSelection(view);
+
+			onGraphChanged?.Invoke();
+		}
+
+		[Serializable]
+		class ClipboardNode
+		{
+			public string TypeName;
+			public string Json;
+			public string OriginalId;
+			public Vector2 Position;
+		}
+
+		[Serializable]
+		class ClipboardEdge
+		{
+			public string FromId;
+			public string ToId;
+			public int ToPortIndex;
+		}
+
+		[Serializable]
+		class ClipboardPayload
+		{
+			public List<ClipboardNode> Nodes = new ();
+			public List<ClipboardEdge> Edges = new ();
 		}
 	}
 }

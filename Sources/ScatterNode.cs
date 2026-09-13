@@ -28,7 +28,7 @@ namespace Nodra
 	[Serializable]
 	public class ScatterNode : GeoNode
 	{
-		public int PointCount = 100;
+		[Min(1)] public int PointCount = 100;
 		public int RandomSeed;
 
 		public override GeoData Process(GeoData input)

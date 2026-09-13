@@ -29,7 +29,9 @@ namespace Nodra
 		public Mesh SourceMesh;
 		public bool AlignToNormal = true;
 		public float RandomYRotation = 360f;
-		public Vector2 UniformScaleRange = new (1f, 1f);
+		const float MinUniformScale = 0.001f;
+
+		[Min(MinUniformScale)] public Vector2 UniformScaleRange = new (1f, 1f);
 		public int RandomSeed;
 
 		public override GeoData Process(GeoData input)
@@ -53,7 +55,11 @@ namespace Nodra
 				var alignment = AlignToNormal ? Quaternion.FromToRotation(Vector3.up, normal) : Quaternion.identity;
 				var yaw = Quaternion.AngleAxis((float) random.NextDouble() * RandomYRotation, Vector3.up);
 				var rotation = alignment * yaw;
-				var scale = Mathf.Lerp(UniformScaleRange.x, UniformScaleRange.y, (float) random.NextDouble());
+				// [Min] only constrains the field in the graph UI - clamped again here in case it was set from code
+				// or loaded from data saved before that attribute existed. Floored just above zero rather than at
+				// it: a negative scale would mirror the copy inside-out, and an exact zero collapses it to a
+				// single point (a degenerate, zero-area mesh) - neither of which "scale" is meant to produce here.
+				var scale = Mathf.Lerp(Mathf.Max(MinUniformScale, UniformScaleRange.x), Mathf.Max(MinUniformScale, UniformScaleRange.y), (float) random.NextDouble());
 
 				var indexOffset = output.PointCount;
 

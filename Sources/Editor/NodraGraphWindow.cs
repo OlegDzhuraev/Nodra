@@ -81,8 +81,15 @@ namespace Nodra
 
 			var generateButton = new ToolbarButton(() =>
 			{
-				if (target != null)
-					target.Generate();
+				if (target == null)
+					return;
+
+				target.Generate();
+
+				// Jumps the Scene view to the generated result - handy since the graph window itself has no 3D
+				// preview of its own.
+				Selection.activeGameObject = target.gameObject;
+				SceneView.lastActiveSceneView?.FrameSelected();
 			}) { text = "Generate" };
 			toolbar.Add(generateButton);
 
