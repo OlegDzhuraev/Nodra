@@ -47,6 +47,11 @@ namespace Nodra
 			viewDataKey = node.Id;
 			title = GetDisplayName(node.GetType());
 
+			// Lets NodraGraphView.uss give Generator nodes' header their own background instead of Node's default,
+			// without hardcoding a color here - see the ".nodra-node-generator #title" rule there.
+			if (node.Category == "Generators")
+				AddToClassList("nodra-node-generator");
+
 			// Node's default USS gives the card a semi-transparent background - fine over a plain grid, but
 			// distracting once nodes overlap/stack, so it's forced opaque here. Widened past Node's fairly narrow
 			// default too, since a Vector2/Vector3 field's sub-fields (Offset's X/Y, ...) get squeezed unreadably

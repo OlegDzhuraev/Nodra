@@ -25,61 +25,31 @@ port(s), and the result is baked into a `Mesh` at the end. Edit the graph visual
   handles, regardless of the graph's current Output; points only, no faces, feed either into `CopyToPointsNode` for
   fences/columns/stepping stones along a path; set
   one as Output directly and, like `ScatterNode` below, its points/normals draw as Scene view gizmos)
-- **Modifiers** — `TransformNode`, `NoiseDisplaceNode` (Perlin or Voronoi/cellular noise, picked via `Type`),
-  `ExtrudeNode`, `ChamferNode`, `SmoothByAngleNode` (blends
-  normals across a shared point when the angle between its faces is under a threshold, keeps them faceted above
-  it - fixes the lighting seam a displaced Sphere/Cylinder/Torus otherwise shows at its UV seam, since
-  Mesh.RecalculateNormals works per vertex index and can't tell that the seam's two index columns are the same
-  position), `TubeNode` (sweeps a polygon cross-section - a "beam" at low `Sides`, a round tube at high ones - along a
-  points-only path like `LineGeneratorNode`/`SplineGeneratorNode`, replacing the path with the swept mesh),
-  `ArrayNode` (appends Count copies, each built from a cumulative offset/rotation around a pivot plus a rotating
-  radial offset - a linear row, a spinning ring, or a spiral depending on which of the three you use),
-  `VertexColorNode` (Flat mode fills one Color everywhere; Gradient mode evaluates a Gradient by Height along an
-  Axis or by Slope - grass-on-flat/rock-on-steep terrain coloring, no separate node needed), `MirrorNode` (appends a mirrored copy across an
-  axis/Offset plane, welding points already sitting on it), `FlipNormalsNode` (reverses winding + normals - fixes
-  an inside-out BooleanNode result or builds an interior-facing shape), `WeldNode` (merges points within Distance
-  of each other, transitively, averaging their position/normal/UV/color - cleans up the duplicate points a
-  BooleanNode/MergeNode/CopyToPointsNode seam typically leaves), `TaperNode` (scales the cross-section
-  perpendicular to an axis from full size to Factor across the input's own extent - cylinder into a cone),
-  `BendNode` (curves the input into an arc of a given angle over its extent along an axis - straight tube into a
-  pipe bend), `TwistNode` (rotates every point around an axis by an angle that grows across the input's extent -
-  straight tube into a drill bit), `RelaxNode` (Laplacian smoothing - moves each point toward its neighbors'
-  average position, softening a jagged NoiseDisplaceNode/BooleanNode result), `SubdivideNode` (splits every
-  primitive into one quad per corner, fanned around its own centroid, Iterations times - adds detail without
-  rounding anything, works on any polygon size), `CapHolesNode` (fans an N-gon across
-  every open boundary loop it finds - fills a hole punched through a patch, or the open edge
-  ChamferNode/ExtrudeNode/BooleanNode leave by design), `FaceFilterNode` (keeps only primitives whose face normal
-  is within MaxAngle of Direction, or drops them instead with Invert - cut the bottom off a sphere, carve a
-  half-pipe, without a full BooleanNode), `DecimateNode` (reduces triangle count to a Quality fraction of the
-  original via [UnityMeshSimplifier](https://github.com/Whinarn/UnityMeshSimplifier) - see **Optional: DecimateNode**
-  below, this is the one node in the whole package with an external dependency), `AutoUVNode` (Triplanar/
-  Spherical/Cylindrical projection - a simple default after a node whose own UVs no longer make sense, not a real
-  unwrap; `Extras/`
-  ships a `Nodra/Checker` URP shader + `M_Checker` material to eyeball the result for stretching/mirroring/seams,
-  also multiplying in vertex color so `VertexColorNode` shows up on it too - and actually lit (main light + ambient
-  probe) rather than flat-unlit, so it doubles as a normals check: a flipped/wrong-direction face goes visibly dark);
+- **Modifiers** — `TransformNode`, `NoiseDisplaceNode` (Perlin or Voronoi/cellular noise),
+  `ExtrudeNode`, `ChamferNode`, `SmoothByAngleNode`, `TubeNode` (sweeps a polygon cross-section - a "beam" at low `Sides`,
+  a round tube at high ones - along a points-only path like `LineGeneratorNode`/`SplineGeneratorNode`), `ArrayNode`,
+  `VertexColorNode`, `MirrorNode`, `FlipNormalsNode`, `WeldNode`, `TaperNode`,
+  `BendNode`, `TwistNode`, `RelaxNode` (Laplacian smoothing), `SubdivideNode`, `CapHolesNode`, `FaceFilterNode`,
+   `DecimateNode` (requires 3rd party package install), `AutoUVNode` (Triplanar/Spherical/Cylindrical projection);
 - **Scatter/copy** — `ScatterNode` + `CopyToPointsNode` (scatter points across a surface, then stamp a mesh at each
-  one). `ScatterNode`'s own output is points with no faces - meant to feed `CopyToPointsNode`, not to be the graph's
-  output directly, so it bakes into a Mesh with nothing to render; set it as Output anyway (e.g. to check the
-  distribution) and the Inspector draws its points/normals as Scene view gizmos instead
+  one);
 - **Combine** — `MergeNode` (two input ports, "Base" and "Branch" - appends the branch's geometry into the base);
   `BooleanNode` (Union/Subtract/Intersect - a CSG boolean via a BSP tree; both inputs need to be closed, manifold
-  shapes; the tree's own construction/clipping runs multithreaded for its first few levels on heavier input, still
-  a single blocking call from BooleanNode's own side).
+  shapes).
 
 ## How to use
 
 Add a `ProceduralMeshGenerator` component (requires a `MeshFilter`) to a GameObject, then click **Open Graph
 Editor** in its inspector. Right-click the graph canvas to add nodes. 
 
-The mesh is rebuilt from whichever node is marked **OUTPUT** (a green outline) - by default whichever node has nothing
-connected to its own output (the end of the chain, or of whichever branch you're editing).
-
-If several branches dangle at once, right-click a node and choose **Set As Output** to pin down which one wins instead 
-of relying on that default.
+The final mesh is rebuilt from `Geometry Output` node (marked green).
 
 Turn on **Auto Generate** (in the graph window's toolbar, or the component's inspector) to have the mesh rebuild
-automatically on every graph edit. 
+automatically on every graph edit.
+
+Turn on **Show Normals** (in the inspector) to draw a Scene view line per vertex along the baked `Mesh`'s own
+normal (shows the `Mesh.normals` the renderer uses) - useful for checking a generator's winding or
+`SmoothByAngleNode`'s result actually looks faceted/smooth where expected. 
 
 **Save Mesh to Project...** (in the inspector) regenerates and saves the current
 result as a `.asset` file, so it survives as a normal project asset instead of only living as an in-memory Mesh on
@@ -96,8 +66,9 @@ whichever submenu its `Category` override names (defaults to "Modifiers" if you 
 bundled, and nothing else in Nodra needs it. Without it installed: no compile error, and a graph that already has
 a `DecimateNode` in it keeps working - the node itself stays put, showing a warning box right in its own body in
 the graph editor and passing its input through unchanged instead of decimating (you'll also see one harmless
-console warning about the unresolved package reference). To install: **Window → Package Manager → + → Install
-package from git URL...** and paste
+console warning about the unresolved package reference). 
+
+To install: **Window → Package Manager → + → Install package from git URL...** and paste
 `https://github.com/Whinarn/UnityMeshSimplifier.git`.
 
 ```cs

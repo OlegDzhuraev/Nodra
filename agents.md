@@ -83,8 +83,11 @@ Sources/
                          Task.Wait()/.Result is unwrapped back to the original exception (WaitFlattened) so a
                          TimeoutException from CheckTimeout() still reaches ProceduralMeshGenerator's catch clause
   GeoMeshBuilder.cs      GeoData -> Unity Mesh (fan-triangulates, always recalculates normals - RecalculateNormals
-                         works per vertex index, so it can't merge a UV seam's position-duplicate indices;
-                         SmoothGroupAttribute-tagged points are re-averaged afterward to fix that, see the node above)
+                         works per vertex index and weights by triangle area, neither of which SmoothByAngleNode
+                         can rely on: it can't merge a UV seam's position-duplicate indices, and it returns exactly
+                         Vector3.zero for a vertex whose only triangle is degenerate (a pole/apex quad's fan always
+                         has one - see SmoothByAngleNode above). SmoothGroupAttribute-tagged points take
+                         GeoData.Normals directly instead - SmoothByAngleNode already computed it correctly there
   Decimate/                the ONE exception to Nodra's zero-dependencies rule - a separate assembly, gated by a
                          versionDefines symbol, so the package being absent is a console warning, not a compile error
     Nodra.Decimate.asmdef  references Nodra + Whinarn.UnityMeshSimplifier.Runtime (com.whinarn.unitymeshsimplifier,
@@ -111,7 +114,9 @@ Sources/
                                GeoNode.Warning (if any) shown as a HelpBox above the fields
     NodraPort.cs               Port subclass reaching Port's protected ctor - only way to attach our own
                                IEdgeConnectorListener instead of Port's hardcoded default one
-    ProceduralMeshGeneratorEditor.cs   AutoGenerate toggle, "Open Graph Editor" button, Generate/Save Mesh buttons
+    ProceduralMeshGeneratorEditor.cs   AutoGenerate toggle, "Open Graph Editor" button, Generate/Save Mesh buttons,
+                                       session-only Show Normals toggle (draws a Scene view line per baked
+                                       Mesh.normals entry - what's actually rendered, not GeoData.Normals)
     Resources/
       NodraGraphView.uss       GridBackground colors - loaded via Resources.Load, not a hard asset reference
 ```

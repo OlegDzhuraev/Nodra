@@ -81,8 +81,17 @@ namespace Nodra
 
 			for (var i = 0; i < corners.Count; i++)
 			for (var j = i + 1; j < corners.Count; j++)
+			{
+				// Two corners of the SAME primitive (a pole/apex ring, where one quad touches the pinch point
+				// through two of its own corners) always compare a face normal to itself - Dot(n, n) == 1, which
+				// passes any threshold including 0, making that primitive's own pinch impossible to ever facet.
+				// Not a real angle test, so it's skipped rather than trivially unioned.
+				if (corners[i].primitive == corners[j].primitive)
+					continue;
+
 				if (Vector3.Dot(faceNormals[corners[i].primitive], faceNormals[corners[j].primitive]) >= cosThreshold)
 					Union(parent, i, j);
+			}
 
 			// Each cluster also gets a stable id for the SmoothGroup attribute below - the original index of
 			// whichever corner reaches that root first, which is always a real, globally unique point index.

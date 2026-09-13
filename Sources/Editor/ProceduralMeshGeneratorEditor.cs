@@ -26,11 +26,17 @@ namespace Nodra
 	[CustomEditor(typeof(ProceduralMeshGenerator))]
 	public class ProceduralMeshGeneratorEditor : UnityEditor.Editor
 	{
+		// Session-only (not serialized onto the component) - a debug view toggle, not project data, same reasoning
+		// as Gizmos toggles elsewhere in Unity being per-Editor-session rather than saved per-object.
+		static bool showNormals;
+
 		public override void OnInspectorGUI()
 		{
 			serializedObject.Update();
 			EditorGUILayout.PropertyField(serializedObject.FindProperty("AutoGenerate"));
 			serializedObject.ApplyModifiedProperties();
+
+			showNormals = EditorGUILayout.Toggle("Show Normals", showNormals);
 
 			EditorGUILayout.Space();
 
@@ -70,6 +76,7 @@ namespace Nodra
 
 		static readonly Color PointCloudColor = new (0.3f, 0.85f, 1f, 0.9f);
 		static readonly Color ControlPointColor = new (1f, 0.85f, 0.1f, 0.95f);
+		static readonly Color NormalColor = new (1f, 0.4f, 0.85f, 0.95f);
 
 		void OnSceneGUI()
 		{
@@ -77,6 +84,38 @@ namespace Nodra
 
 			DrawPointCloud(generator);
 			DrawSplineControlPoints(generator);
+
+			if (showNormals)
+				DrawMeshNormals(generator);
+		}
+
+		// A line per vertex of the actually-baked Mesh along its normal - reads Mesh.normals directly rather than
+		// GeoData.Normals, which GeoMeshBuilder mostly discards/recalculates, so this shows exactly what the
+		// renderer sees (e.g. whether SmoothByAngleNode produced genuinely distinct per-facet normals or not).
+		static void DrawMeshNormals(ProceduralMeshGenerator generator)
+		{
+			var meshFilter = generator.GetComponent<MeshFilter>();
+			var mesh = meshFilter ? meshFilter.sharedMesh : null;
+			if (!mesh)
+				return;
+
+			var vertices = mesh.vertices;
+			var normals = mesh.normals;
+			if (normals.Length != vertices.Length)
+				return;
+
+			var previousColor = Handles.color;
+			Handles.color = NormalColor;
+
+			for (var i = 0; i < vertices.Length; i++)
+			{
+				var worldPosition = generator.transform.TransformPoint(vertices[i]);
+				var size = HandleUtility.GetHandleSize(worldPosition) * 0.5f;
+
+				Handles.DrawLine(worldPosition, worldPosition + generator.transform.TransformDirection(normals[i]) * size);
+			}
+
+			Handles.color = previousColor;
 		}
 
 		// A point-cloud result (ScatterNode's/LineGeneratorNode's typical output - or any other node whose result

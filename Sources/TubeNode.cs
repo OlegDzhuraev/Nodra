@@ -98,13 +98,20 @@ namespace Nodra
 
 			if (!Closed)
 			{
+				// Twist-rotated the same way the ring at this same path point was above - the raw (untwisted)
+				// frame would fan the cap from a different orientation than the ring boundary it's supposed to
+				// close, leaving a seam/kink between the cap and the twisted side wall instead of a flat closure.
 				if (CapStart)
-					AddCap(input, cos, sin, path[0], frames[0].right, frames[0].up, -tangents[0], flip: true, radius);
+				{
+					var startFrame = RotateFrame(frames[0], tangents[0], Twist);
+					AddCap(input, cos, sin, path[0], startFrame.right, startFrame.up, -tangents[0], flip: true, radius);
+				}
 
 				if (CapEnd)
 				{
 					var last = path.Count - 1;
-					AddCap(input, cos, sin, path[last], frames[last].right, frames[last].up, tangents[last], flip: false, radius);
+					var endFrame = RotateFrame(frames[last], tangents[last], Twist);
+					AddCap(input, cos, sin, path[last], endFrame.right, endFrame.up, tangents[last], flip: false, radius);
 				}
 			}
 

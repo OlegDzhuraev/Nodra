@@ -49,30 +49,23 @@ namespace Nodra
 			return mesh;
 		}
 
-		// RecalculateNormals above works per vertex INDEX, so it can't merge normals across a UV seam's
-		// position-duplicate indices - re-averages just the indices SmoothByAngleNode tagged as one smoothing
-		// group, overriding RecalculateNormals's result only there. A no-op mesh with no SmoothByAngleNode in it.
+		// RecalculateNormals above works per vertex INDEX and by triangle AREA, neither of which SmoothByAngleNode
+		// can rely on: it can't merge normals across a UV seam's position-duplicate indices, and a pole/apex
+		// quad's fan-triangulation always makes one of its two triangles zero-area (both its non-pole corners are
+		// the same pole point) - a vertex used only by that degenerate triangle gets exactly Vector3.zero back,
+		// not something close to the right direction. SmoothByAngleNode already computed the correct normal
+		// itself (Newell's method on the actual faces, no triangle-area weighting involved) and left it in
+		// GeoData.Normals, so tagged points just take that value directly instead of trusting RecalculateNormals.
 		static void ApplySmoothGroups(GeoData data, Mesh mesh)
 		{
 			if (!data.HasAttribute(GeoData.SmoothGroupAttribute))
 				return;
 
 			var normals = mesh.normals;
-			var sums = new Dictionary<int, Vector3>();
 
 			for (var i = 0; i < data.PointCount; i++)
-			{
-				var group = (int) data.GetAttribute(GeoData.SmoothGroupAttribute, i);
-				if (group != 0)
-					sums[group] = sums.TryGetValue(group, out var sum) ? sum + normals[i] : normals[i];
-			}
-
-			for (var i = 0; i < data.PointCount; i++)
-			{
-				var group = (int) data.GetAttribute(GeoData.SmoothGroupAttribute, i);
-				if (group != 0)
-					normals[i] = sums[group].normalized;
-			}
+				if (data.GetAttribute(GeoData.SmoothGroupAttribute, i) != 0)
+					normals[i] = data.Normals[i];
 
 			mesh.SetNormals(normals);
 		}

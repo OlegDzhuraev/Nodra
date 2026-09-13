@@ -41,6 +41,17 @@
     white-space: nowrap;
 }
 
+/* NodraNodeView tags a Generator node's root with this class. The color lives in a custom property (rather than
+   directly on the #title rule below) so it's a single value to tweak, and so it's easy to give other categories
+   their own "-header-color" variable + class pair later following the same pattern. */
+.nodra-node-generator {
+    --nodra-generator-header-color: rgb(107, 73, 31);
+}
+
+.nodra-node-generator #title {
+    background-color: var(--nodra-generator-header-color);
+}
+
 .nodra-node-output-outline {
     position: absolute;
     top: 0;
