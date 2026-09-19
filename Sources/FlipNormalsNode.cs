@@ -23,22 +23,23 @@ namespace Nodra
 	/// <summary> Reverses every primitive's point order and negates every normal - fixes a mesh that renders
 	/// inside-out (a flipped BooleanNode result, an interior-facing shape like a skybox or cave). Reversing a
 	/// polygon's traversal order always flips its Cross-product normal, for any polygon, so this needs no
-	/// per-shape winding check the way a new generator's own point order would. </summary>
+	/// per-shape winding check the way a new generator's own point order would. Runs entirely in the NodraCore
+	/// native library (see Native/NodraCore/FlipNormals.cs) - there's no managed fallback, same as DecimateNode's
+	/// optional package: without it, Process() passes geometry through unchanged and Warning explains why. </summary>
 	[Serializable]
 	public class FlipNormalsNode : GeoNode
 	{
 		public override string Category => "Cleanup";
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of flipping normals.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null)
-				return null;
+			if (input == null || !NodraNative.IsAvailable)
+				return input;
 
-			foreach (var primitive in input.Primitives)
-				Array.Reverse(primitive);
-
-			for (var i = 0; i < input.Normals.Count; i++)
-				input.Normals[i] = -input.Normals[i];
+			NodraNative.FlipNormals(input);
 
 			return input;
 		}

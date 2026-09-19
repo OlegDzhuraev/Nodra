@@ -23,7 +23,10 @@ namespace Nodra
 {
 	/// <summary> Rotates every point around Axis by an angle that grows from 0 at the Axis-min end of the input to
 	/// Angle at the Axis-max end - a straight tube into a drill bit / rope twist. A pure per-point rotation, so
-	/// normals rotate along with it instead of needing GeoMeshBuilder's recalculation to stay correct. </summary>
+	/// normals rotate along with it instead of needing GeoMeshBuilder's recalculation to stay correct. Runs
+	/// entirely in the NodraCore native library (see Native/NodraCore/Twist.cs) - there's no managed fallback,
+	/// same as DecimateNode's optional package: without it, Process() passes geometry through unchanged and
+	/// Warning explains why. </summary>
 	[Serializable]
 	public class TwistNode : GeoNode
 	{
@@ -33,47 +36,22 @@ namespace Nodra
 		public Vector3 Center;
 		public float Angle = 180f;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of twisting.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null || input.PointCount == 0)
+			if (input == null || input.PointCount == 0 || !NodraNative.IsAvailable)
 				return input;
 
-			var min = float.MaxValue;
-			var max = float.MinValue;
+			var (points, normals) = NodraNative.Twist(input, (int) Axis, Center, Angle);
 
-			for (var i = 0; i < input.PointCount; i++)
-			{
-				var value = Get(input.Points[i] - Center, Axis);
-				min = Mathf.Min(min, value);
-				max = Mathf.Max(max, value);
-			}
-
-			var range = max - min;
-			if (range <= 0f)
-				return input;
-
-			var axisDirection = Direction(Axis);
-
-			for (var i = 0; i < input.PointCount; i++)
-			{
-				var local = input.Points[i] - Center;
-				var t = (Get(local, Axis) - min) / range;
-				var rotation = Quaternion.AngleAxis(t * Angle, axisDirection);
-
-				input.Points[i] = Center + rotation * local;
-				input.Normals[i] = rotation * input.Normals[i];
-			}
+			input.Points.Clear();
+			input.Points.AddRange(points);
+			input.Normals.Clear();
+			input.Normals.AddRange(normals);
 
 			return input;
 		}
-
-		static float Get(Vector3 v, Axis3D axis) => axis switch { Axis3D.X => v.x, Axis3D.Y => v.y, _ => v.z };
-
-		static Vector3 Direction(Axis3D axis) => axis switch
-		{
-			Axis3D.X => Vector3.right,
-			Axis3D.Y => Vector3.up,
-			_ => Vector3.forward,
-		};
 	}
 }

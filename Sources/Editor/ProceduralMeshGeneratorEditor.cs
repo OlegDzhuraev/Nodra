@@ -37,6 +37,9 @@ namespace Nodra
 			serializedObject.ApplyModifiedProperties();
 
 			showNormals = EditorGUILayout.Toggle("Show Normals", showNormals);
+			GeoGraph.LogCacheStats = EditorGUILayout.Toggle(
+				new GUIContent("Log Cache Stats", "Logs how many nodes Evaluate() reused from cache vs. recomputed, and how long it took."),
+				GeoGraph.LogCacheStats);
 
 			EditorGUILayout.Space();
 
@@ -58,6 +61,14 @@ namespace Nodra
 				if (GUILayout.Button("Save Mesh to Project..."))
 					foreach (var generator in targets)
 						SaveMeshToProject((ProceduralMeshGenerator) generator);
+
+				if (GUILayout.Button("Export to FBX..."))
+					foreach (var generator in targets)
+					{
+						var proceduralMeshGenerator = (ProceduralMeshGenerator) generator;
+						proceduralMeshGenerator.Generate();
+						FbxExportUtility.ExportGameObject(proceduralMeshGenerator.gameObject);
+					}
 			}
 		}
 

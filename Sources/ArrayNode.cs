@@ -17,7 +17,6 @@
  */
 
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Nodra
@@ -26,7 +25,10 @@ namespace Nodra
 	/// cumulative transform for its index: rotated by Rotation * copy around Pivot, then moved by Offset * copy
 	/// plus RadialOffset rotated along with it - the last term is what turns a plain rotating array into a ring,
 	/// since a fixed local vector rotated by an increasing angle walks around a circle of that radius. Nothing is
-	/// welded, so coincident points between copies stay separate (same as MergeNode). </summary>
+	/// welded, so coincident points between copies stay separate (same as MergeNode). Runs entirely in the
+	/// NodraCore native library (see Native/NodraCore/ArrayModifier.cs) - there's no managed fallback, same as
+	/// DecimateNode's optional package: without it, Process() passes geometry through unchanged and Warning
+	/// explains why. </summary>
 	[Serializable]
 	public class ArrayNode : GeoNode
 	{
@@ -38,48 +40,15 @@ namespace Nodra
 		public Vector3 RadialOffset;
 		public Vector3 Pivot;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of arraying it.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null || input.PointCount == 0)
+			if (input == null || input.PointCount == 0 || !NodraNative.IsAvailable)
 				return input;
 
-			// Snapshotted before clearing - every copy (including the first) is built fresh from this, never from
-			// a copy this node already appended.
-			var sourcePoints = new List<Vector3>(input.Points);
-			var sourceNormals = new List<Vector3>(input.Normals);
-			var sourceUvs = new List<Vector2>(input.Uvs);
-			var sourceColors = new List<Color>(input.Colors);
-			var sourcePrimitives = new List<int[]>(input.Primitives);
-
-			input.Points.Clear();
-			input.Normals.Clear();
-			input.Uvs.Clear();
-			input.Colors.Clear();
-			input.Primitives.Clear();
-
-			var count = Mathf.Max(1, Count);
-
-			for (var copy = 0; copy < count; copy++)
-			{
-				var rotation = Quaternion.Euler(Rotation * copy);
-				var translation = Offset * copy + rotation * RadialOffset;
-				var indexOffset = input.PointCount;
-
-				for (var i = 0; i < sourcePoints.Count; i++)
-				{
-					var position = Pivot + rotation * (sourcePoints[i] - Pivot) + translation;
-					input.AddPoint(position, rotation * sourceNormals[i], sourceUvs[i], sourceColors[i]);
-				}
-
-				foreach (var primitive in sourcePrimitives)
-				{
-					var shifted = new int[primitive.Length];
-					for (var i = 0; i < primitive.Length; i++)
-						shifted[i] = primitive[i] + indexOffset;
-
-					input.AddPrimitive(shifted);
-				}
-			}
+			NodraNative.ArrayModifier(input, Count, Offset, Rotation, RadialOffset, Pivot);
 
 			return input;
 		}

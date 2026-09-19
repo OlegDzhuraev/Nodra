@@ -17,7 +17,6 @@
  */
 
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Nodra
@@ -25,7 +24,9 @@ namespace Nodra
 	/// <summary> Keeps only primitives whose face normal is within MaxAngle of Direction, dropping the rest (Invert
 	/// flips it - discard those instead, keep everything else) - cut the bottom off a sphere, remove upward-facing
 	/// caps, carve a half-pipe without a full BooleanNode. Leftover points no primitive references anymore aren't
-	/// removed; chain a WeldNode-adjacent cleanup pass first if that matters. </summary>
+	/// removed; chain a RemoveUnusedPointsNode after this one if that matters. Runs entirely in the NodraCore
+	/// native library (see Native/NodraCore/FaceFilter.cs) - there's no managed fallback, same as DecimateNode's
+	/// optional package: without it, Process() passes geometry through unchanged and Warning explains why. </summary>
 	[Serializable]
 	public class FaceFilterNode : GeoNode
 	{
@@ -35,46 +36,17 @@ namespace Nodra
 		[Range(0f, 180f)] public float MaxAngle = 90f;
 		public bool Invert;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of filtering faces.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null || input.Primitives.Count == 0)
+			if (input == null || input.Primitives.Count == 0 || !NodraNative.IsAvailable)
 				return input;
 
-			var direction = Direction.sqrMagnitude > 0f ? Direction.normalized : Vector3.up;
-			var cosThreshold = Mathf.Cos(MaxAngle * Mathf.Deg2Rad);
-			var kept = new List<int[]>();
-
-			foreach (var primitive in input.Primitives)
-			{
-				var withinAngle = Vector3.Dot(ComputeFaceNormal(input, primitive), direction) >= cosThreshold;
-
-				if (withinAngle != Invert)
-					kept.Add(primitive);
-			}
-
-			input.Primitives.Clear();
-			input.Primitives.AddRange(kept);
+			NodraNative.FaceFilter(input, Direction, MaxAngle, Invert);
 
 			return input;
-		}
-
-		/// <summary> Newell's method, matching ComputeFaceNormal in ExtrudeNode/ChamferNode/SmoothByAngleNode/AutoUVNode. </summary>
-		static Vector3 ComputeFaceNormal(GeoData data, int[] primitive)
-		{
-			var normal = Vector3.zero;
-			var count = primitive.Length;
-
-			for (var i = 0; i < count; i++)
-			{
-				var current = data.Points[primitive[i]];
-				var next = data.Points[primitive[(i + 1) % count]];
-
-				normal.x += (current.y - next.y) * (current.z + next.z);
-				normal.y += (current.z - next.z) * (current.x + next.x);
-				normal.z += (current.x - next.x) * (current.y + next.y);
-			}
-
-			return normal.normalized;
 		}
 	}
 }

@@ -24,7 +24,10 @@ namespace Nodra
 	/// <summary> Generates PointCount points evenly spaced from Start to End (a single point at Start when
 	/// PointCount is 1) - like ScatterNode, this is points with no faces, meant to feed a following
 	/// CopyToPointsNode (fences, columns, stepping stones, ...) rather than to be built into a mesh directly. Every
-	/// point's normal is Vector3.up regardless of the line's own direction, so copies stay upright by default. </summary>
+	/// point's normal is Vector3.up regardless of the line's own direction, so copies stay upright by default.
+	/// Runs entirely in the NodraCore native library (see Native/NodraCore/LineGenerator.cs) - there's no managed
+	/// fallback, same as DecimateNode's optional package: without it, Process() produces no geometry at all and
+	/// Warning explains why. </summary>
 	[Serializable]
 	public class LineGeneratorNode : GeoNode
 	{
@@ -36,16 +39,17 @@ namespace Nodra
 
 		public override int InputCount => 0;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node produces no geometry until it is.";
+
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();
-			var pointCount = Mathf.Max(1, PointCount);
 
-			for (var i = 0; i < pointCount; i++)
-			{
-				var t = pointCount > 1 ? i / (float) (pointCount - 1) : 0f;
-				data.AddPoint(Vector3.Lerp(Start, End, t), Vector3.up, new Vector2(t, 0f));
-			}
+			if (!NodraNative.IsAvailable)
+				return data;
+
+			NodraNative.LineGenerator(data, Start, End, PointCount);
 
 			return data;
 		}

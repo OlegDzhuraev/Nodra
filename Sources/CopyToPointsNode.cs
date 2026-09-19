@@ -22,7 +22,24 @@ using UnityEngine;
 namespace Nodra
 {
 	/// <summary> Stamps a source mesh at every point of the input geometry, optionally aligning to the point's
-	/// normal and jittering rotation/scale, merging all copies into one output. Typically fed by a ScatterNode. </summary>
+	/// normal and jittering rotation/scale, merging all copies into one output. Typically fed by a ScatterNode. A
+	/// per-instance attribute (ScaleAttribute) can drive scale too - read once per INPUT point (via GeoData.
+	/// GetAttribute, fallback 1 so an unset point stamps at its otherwise-normal size instead of collapsing to
+	/// nothing), multiplied into the same per-copy scale UniformScaleRange's own random roll produces, not read per
+	/// SourceMesh vertex - a "Density"/custom value ScatterNode already carried onto its scattered points
+	/// (BlendAttributesFrom) can size what gets stamped there without a second node. Runs entirely in the
+	/// NodraCore native library (see Native/NodraCore/CopyToPoints.cs) - there's no managed fallback, same as
+	/// DecimateNode's optional package: without it, Process() produces no geometry at all and Warning explains why.
+	///
+	/// AlignToNormal is NOT a bit-identical port when it actually rotates something: Unity's own
+	/// Quaternion.FromToRotation is a native engine call ("FromToQuaternionSafe", confirmed via UnityCsReference's
+	/// own Math.bindings.cs - the same kind of gap as Mathf.PerlinNoise elsewhere in this project) with no publicly
+	/// reproducible algorithm. Every normal direction except one still resolves to the single mathematically
+	/// correct shortest-arc rotation, which native reproduces exactly - only a point whose normal lands EXACTLY
+	/// antiparallel to Up (straight down - common enough for a flat downward-facing patch to hit in practice, not
+	/// just a theoretical edge case) has no unique answer; native picks a fixed axis (world Z) for that one
+	/// direction instead of guessing at Unity's own unobservable native tie-break, a narrow, deliberate,
+	/// documented difference (see CopyToPoints.cs's own comment) rather than a silent approximation. </summary>
 	[Serializable]
 	public class CopyToPointsNode : GeoNode
 	{
@@ -36,48 +53,23 @@ namespace Nodra
 		[Min(MinUniformScale)] public Vector2 UniformScaleRange = new (1f, 1f);
 		public int RandomSeed;
 
+		/// <summary> Empty (default) leaves scale entirely up to UniformScaleRange's own random roll, same as
+		/// before this field existed. Set to a name (e.g. one a SetAttributeNode wrote) to multiply that point's
+		/// own value into the roll instead of ignoring it - a point where the name was never set reads back 1
+		/// (explicitly, not GetAttribute's own 0 default), so it stamps at whatever UniformScaleRange alone would
+		/// have given it rather than vanishing to a zero-scale point. </summary>
+		public string ScaleAttribute = "";
+
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node produces no geometry until it is.";
+
 		public override GeoData Process(GeoData input)
 		{
-			var output = new GeoData();
+			if (input == null || SourceMesh == null || !NodraNative.IsAvailable)
+				return new GeoData();
 
-			if (input == null || SourceMesh == null)
-				return output;
-
-			var sourceVertices = SourceMesh.vertices;
-			var sourceNormals = SourceMesh.normals;
-			var sourceUvs = SourceMesh.uv;
-			var sourceTriangles = SourceMesh.triangles;
-			var random = new System.Random(RandomSeed);
-
-			for (var p = 0; p < input.PointCount; p++)
-			{
-				var position = input.Points[p];
-				var normal = p < input.Normals.Count ? input.Normals[p] : Vector3.up;
-
-				var alignment = AlignToNormal ? Quaternion.FromToRotation(Vector3.up, normal) : Quaternion.identity;
-				var yaw = Quaternion.AngleAxis((float) random.NextDouble() * RandomYRotation, Vector3.up);
-				var rotation = alignment * yaw;
-				// [Min] only constrains the field in the graph UI - clamped again here in case it was set from code
-				// or loaded from data saved before that attribute existed. Floored just above zero rather than at
-				// it: a negative scale would mirror the copy inside-out, and an exact zero collapses it to a
-				// single point (a degenerate, zero-area mesh) - neither of which "scale" is meant to produce here.
-				var scale = Mathf.Lerp(Mathf.Max(MinUniformScale, UniformScaleRange.x), Mathf.Max(MinUniformScale, UniformScaleRange.y), (float) random.NextDouble());
-
-				var indexOffset = output.PointCount;
-
-				for (var i = 0; i < sourceVertices.Length; i++)
-				{
-					var vertexNormal = i < sourceNormals.Length ? sourceNormals[i] : Vector3.up;
-					var uv = i < sourceUvs.Length ? sourceUvs[i] : Vector2.zero;
-
-					output.AddPoint(position + rotation * (sourceVertices[i] * scale), rotation * vertexNormal, uv);
-				}
-
-				for (var i = 0; i < sourceTriangles.Length; i += 3)
-					output.AddPrimitive(indexOffset + sourceTriangles[i], indexOffset + sourceTriangles[i + 1], indexOffset + sourceTriangles[i + 2]);
-			}
-
-			return output;
+			return NodraNative.CopyToPoints(input, SourceMesh, AlignToNormal, RandomYRotation,
+				UniformScaleRange.x, UniformScaleRange.y, ScaleAttribute, RandomSeed);
 		}
 	}
 }

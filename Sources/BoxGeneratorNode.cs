@@ -22,7 +22,9 @@ using UnityEngine;
 namespace Nodra
 {
 	/// <summary> Generates a box centered on the origin with a separate set of 4 points per face
-	/// (hard edges, flat shading). </summary>
+	/// (hard edges, flat shading). Runs entirely in the NodraCore native library (see Native/NodraCore/
+	/// BoxGenerator.cs) - there's no managed fallback, same as DecimateNode's optional package: without it,
+	/// Process() produces no geometry at all and Warning explains why. </summary>
 	[Serializable]
 	public class BoxGeneratorNode : GeoNode
 	{
@@ -32,32 +34,17 @@ namespace Nodra
 
 		public override int InputCount => 0;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node produces no geometry.";
+
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();
 
-			// [Min] only constrains the Inspector - an odd number of negative components mirrors the whole box
-			// (orientation-reversing), which would face every one of its faces inward, so it's re-clamped here too.
-			var h = Vector3.Max(Vector3.zero, Size) * 0.5f;
-
-			AddFace(data, new Vector3(-h.x, h.y, -h.z), new Vector3(-h.x, h.y, h.z), new Vector3(h.x, h.y, h.z), new Vector3(h.x, h.y, -h.z), Vector3.up); // top
-			AddFace(data, new Vector3(-h.x, -h.y, -h.z), new Vector3(h.x, -h.y, -h.z), new Vector3(h.x, -h.y, h.z), new Vector3(-h.x, -h.y, h.z), Vector3.down); // bottom
-			AddFace(data, new Vector3(h.x, -h.y, -h.z), new Vector3(h.x, h.y, -h.z), new Vector3(h.x, h.y, h.z), new Vector3(h.x, -h.y, h.z), Vector3.right); // right
-			AddFace(data, new Vector3(-h.x, -h.y, -h.z), new Vector3(-h.x, -h.y, h.z), new Vector3(-h.x, h.y, h.z), new Vector3(-h.x, h.y, -h.z), Vector3.left); // left
-			AddFace(data, new Vector3(-h.x, -h.y, h.z), new Vector3(h.x, -h.y, h.z), new Vector3(h.x, h.y, h.z), new Vector3(-h.x, h.y, h.z), Vector3.forward); // front
-			AddFace(data, new Vector3(-h.x, -h.y, -h.z), new Vector3(-h.x, h.y, -h.z), new Vector3(h.x, h.y, -h.z), new Vector3(h.x, -h.y, -h.z), Vector3.back); // back
+			if (NodraNative.IsAvailable)
+				NodraNative.BoxGenerator(data, Size);
 
 			return data;
-		}
-
-		static void AddFace(GeoData data, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal)
-		{
-			var i0 = data.AddPoint(a, normal, new Vector2(0f, 0f));
-			var i1 = data.AddPoint(b, normal, new Vector2(0f, 1f));
-			var i2 = data.AddPoint(c, normal, new Vector2(1f, 1f));
-			var i3 = data.AddPoint(d, normal, new Vector2(1f, 0f));
-
-			data.AddPrimitive(i0, i1, i2, i3);
 		}
 	}
 }

@@ -17,7 +17,6 @@
  */
 
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Nodra
@@ -26,7 +25,9 @@ namespace Nodra
 	/// half of Catmull-Clark (no position averaging/smoothing, so it adds detail without rounding sharp shapes).
 	/// Works on any polygon size, not just triangles or quads. An edge shared by index between two primitives gets
 	/// one shared midpoint; an edge only shared by position (BoxGeneratorNode's per-face corners) gets two,
-	/// keeping the hard edge intact through the split. </summary>
+	/// keeping the hard edge intact through the split. Runs entirely in the NodraCore native library (see Native/
+	/// NodraCore/Subdivide.cs) - there's no managed fallback, same as DecimateNode's optional package: without it,
+	/// Process() passes geometry through unchanged and Warning explains why. </summary>
 	[Serializable]
 	public class SubdivideNode : GeoNode
 	{
@@ -34,80 +35,17 @@ namespace Nodra
 
 		[Range(1, 4)] public int Iterations = 1;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of subdividing.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null || input.Primitives.Count == 0)
+			if (input == null || input.Primitives.Count == 0 || !NodraNative.IsAvailable)
 				return input;
 
-			var iterations = Mathf.Max(1, Iterations);
-			for (var i = 0; i < iterations; i++)
-				SubdivideOnce(input);
+			NodraNative.Subdivide(input, Iterations);
 
 			return input;
-		}
-
-		// Winding verified by hand on a concrete quad: (corner, edgeMidpoint, centroid, previousEdgeMidpoint)
-		// keeps the same outward Cross-product direction as the original primitive, for every one of its corners.
-		static void SubdivideOnce(GeoData data)
-		{
-			var sourcePrimitives = new List<int[]>(data.Primitives);
-			data.Primitives.Clear();
-
-			var midpoints = new Dictionary<(int a, int b), int>();
-
-			foreach (var primitive in sourcePrimitives)
-			{
-				var count = primitive.Length;
-				var edgeMidpoints = new int[count];
-
-				for (var i = 0; i < count; i++)
-					edgeMidpoints[i] = Midpoint(data, midpoints, primitive[i], primitive[(i + 1) % count]);
-
-				var centroid = Centroid(data, primitive);
-
-				for (var i = 0; i < count; i++)
-				{
-					var previous = edgeMidpoints[(i - 1 + count) % count];
-					data.AddPrimitive(primitive[i], edgeMidpoints[i], centroid, previous);
-				}
-			}
-		}
-
-		static int Midpoint(GeoData data, Dictionary<(int a, int b), int> cache, int a, int b)
-		{
-			var key = a < b ? (a, b) : (b, a);
-
-			if (cache.TryGetValue(key, out var index))
-				return index;
-
-			var position = (data.Points[a] + data.Points[b]) * 0.5f;
-			var normal = (data.Normals[a] + data.Normals[b]).normalized;
-			var uv = (data.Uvs[a] + data.Uvs[b]) * 0.5f;
-			var color = (data.Colors[a] + data.Colors[b]) * 0.5f;
-
-			index = data.AddPoint(position, normal, uv, color);
-			cache[key] = index;
-
-			return index;
-		}
-
-		static int Centroid(GeoData data, int[] primitive)
-		{
-			var position = Vector3.zero;
-			var normal = Vector3.zero;
-			var uv = Vector2.zero;
-			var color = Color.clear;
-
-			foreach (var index in primitive)
-			{
-				position += data.Points[index];
-				normal += data.Normals[index];
-				uv += data.Uvs[index];
-				color += data.Colors[index];
-			}
-
-			var count = primitive.Length;
-			return data.AddPoint(position / count, normal.normalized, uv / count, color / count);
 		}
 	}
 }

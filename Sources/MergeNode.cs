@@ -23,7 +23,8 @@ namespace Nodra
 	/// <summary> Appends a second branch's geometry into the first, now that the graph editor can actually wire
 	/// two real inputs into one node - a proper multi-input merge, unlike the embedded-sub-pipeline approximation
 	/// this node used before the graph existed. Nothing is welded, so coincident points from both sides stay
-	/// separate. </summary>
+	/// separate. Runs entirely in the NodraCore native library (see Native/NodraCore/Merge.cs) - there's no
+	/// managed fallback: without it, Branch is silently dropped instead of merged in, and Warning explains why. </summary>
 	[Serializable]
 	public class MergeNode : GeoNode
 	{
@@ -33,6 +34,9 @@ namespace Nodra
 
 		public override string GetInputPortName(int index) => index == 0 ? "Base" : "Branch";
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - Branch is dropped instead of being merged in.";
+
 		public override GeoData Process(GeoData[] inputs)
 		{
 			var baseData = inputs.Length > 0 ? inputs[0] : null;
@@ -40,27 +44,10 @@ namespace Nodra
 
 			var output = baseData ?? new GeoData();
 
-			if (branchData != null)
-				Append(output, branchData);
+			if (branchData != null && NodraNative.IsAvailable)
+				NodraNative.Merge(output, branchData);
 
 			return output;
-		}
-
-		static void Append(GeoData target, GeoData source)
-		{
-			var indexOffset = target.PointCount;
-
-			for (var i = 0; i < source.PointCount; i++)
-				target.AddPoint(source.Points[i], source.Normals[i], source.Uvs[i], source.Colors[i]);
-
-			foreach (var primitive in source.Primitives)
-			{
-				var shifted = new int[primitive.Length];
-				for (var i = 0; i < primitive.Length; i++)
-					shifted[i] = primitive[i] + indexOffset;
-
-				target.AddPrimitive(shifted);
-			}
 		}
 	}
 }

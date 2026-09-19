@@ -41,6 +41,18 @@
     white-space: nowrap;
 }
 
+/* CreateVectorField's header label has no input sharing its row, so the max-width cap above isn't needed here. */
+.nodra-node-fields .nodra-node-vector-field > .unity-base-field__label {
+    max-width: none;
+}
+
+/* Indents each axis field under its header. */
+.nodra-node-vector-field > .unity-float-field,
+.nodra-node-vector-field > .unity-integer-field {
+    margin-left: 8px;
+    margin-top: 2px;
+}
+
 /* NodraNodeView tags a Generator node's root with this class. The color lives in a custom property (rather than
    directly on the #title rule below) so it's a single value to tweak, and so it's easy to give other categories
    their own "-header-color" variable + class pair later following the same pattern. */

@@ -17,76 +17,32 @@
  */
 
 using System;
-using System.Collections.Generic;
 
 namespace Nodra
 {
 	/// <summary> Fans an N-gon across every open boundary loop it finds - fills a hole punched through the middle
 	/// of a patch, or the open edge ChamferNode/ExtrudeNode/BooleanNode leaves by design. Assumes each loop is a
 	/// simple, non-self-touching cycle; a non-manifold boundary (two holes sharing one vertex) isn't handled
-	/// specially - that vertex's two boundary edges just overwrite each other in the walk. </summary>
+	/// specially - that vertex's two boundary edges just overwrite each other in the walk. Runs entirely in the
+	/// NodraCore native library (see Native/NodraCore/CapHoles.cs) - there's no managed fallback, same as
+	/// DecimateNode's optional package: without it, Process() passes geometry through unchanged and Warning
+	/// explains why. </summary>
 	[Serializable]
 	public class CapHolesNode : GeoNode
 	{
 		public override string Category => "Build";
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of capping holes.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null || input.Primitives.Count == 0)
+			if (input == null || input.Primitives.Count == 0 || !NodraNative.IsAvailable)
 				return input;
 
-			var edgeOccurrences = new HashSet<(int from, int to)>();
-
-			foreach (var primitive in input.Primitives)
-			{
-				var count = primitive.Length;
-				for (var i = 0; i < count; i++)
-					edgeOccurrences.Add((primitive[i], primitive[(i + 1) % count]));
-			}
-
-			var next = new Dictionary<int, int>();
-
-			foreach (var edge in edgeOccurrences)
-				if (!edgeOccurrences.Contains((edge.to, edge.from)))
-					next[edge.from] = edge.to;
-
-			var visited = new HashSet<int>();
-
-			foreach (var start in next.Keys)
-			{
-				if (visited.Contains(start))
-					continue;
-
-				var loop = WalkLoop(next, start, visited);
-				if (loop.Count < 3)
-					continue;
-
-				// The walk follows each edge exactly as the surrounding surface recorded it, which is the reverse
-				// of the correct cap winding - verified by hand on a hole punched through the middle of a 3x3 grid.
-				loop.Reverse();
-				input.AddPrimitive(loop.ToArray());
-			}
+			NodraNative.CapHoles(input);
 
 			return input;
-		}
-
-		static List<int> WalkLoop(Dictionary<int, int> next, int start, HashSet<int> visited)
-		{
-			var loop = new List<int> { start };
-			visited.Add(start);
-			var current = start;
-
-			while (next.TryGetValue(current, out var nextPoint) && nextPoint != start)
-			{
-				if (!visited.Add(nextPoint))
-					return new List<int>(); // hit an already-visited point without closing - not a simple loop
-
-				loop.Add(nextPoint);
-				current = nextPoint;
-			}
-
-			// Only a loop that actually made it back to start is a real hole boundary.
-			return next.TryGetValue(current, out var closing) && closing == start ? loop : new List<int>();
 		}
 	}
 }

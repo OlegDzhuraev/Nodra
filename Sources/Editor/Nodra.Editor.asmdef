@@ -2,7 +2,8 @@
     "name": "Nodra.Editor",
     "rootNamespace": "",
     "references": [
-        "GUID:aa71b7950197c35f9ba4c63e44c99427"
+        "GUID:aa71b7950197c35f9ba4c63e44c99427",
+        "Unity.Formats.Fbx.Editor"
     ],
     "includePlatforms": [
         "Editor"
@@ -13,6 +14,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.formats.fbx",
+            "expression": "",
+            "define": "NODRA_FBX_EXPORT"
+        }
+    ],
     "noEngineReferences": false
 }

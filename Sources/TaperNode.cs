@@ -23,7 +23,9 @@ namespace Nodra
 {
 	/// <summary> Scales every point's cross-section perpendicular to Axis, from full size at the Axis-min end of
 	/// the input to Factor at the Axis-max end - a cone from a cylinder, a spike from a tube. Center shifts which
-	/// world point the perpendicular scaling is measured from. </summary>
+	/// world point the perpendicular scaling is measured from. Runs entirely in the NodraCore native library (see
+	/// Native/NodraCore/Taper.cs) - there's no managed fallback, same as DecimateNode's optional package: without
+	/// it, Process() passes geometry through unchanged and Warning explains why. </summary>
 	[Serializable]
 	public class TaperNode : GeoNode
 	{
@@ -33,44 +35,20 @@ namespace Nodra
 		public Vector3 Center;
 		public float Factor = 0.5f;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of tapering.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null || input.PointCount == 0)
+			if (input == null || input.PointCount == 0 || !NodraNative.IsAvailable)
 				return input;
 
-			var min = float.MaxValue;
-			var max = float.MinValue;
+			var tapered = NodraNative.Taper(input, (int) Axis, Center, Factor);
 
-			for (var i = 0; i < input.PointCount; i++)
-			{
-				var value = Get(input.Points[i] - Center, Axis);
-				min = Mathf.Min(min, value);
-				max = Mathf.Max(max, value);
-			}
-
-			var range = max - min;
-			if (range <= 0f)
-				return input;
-
-			for (var i = 0; i < input.PointCount; i++)
-			{
-				var local = input.Points[i] - Center;
-				var t = (Get(local, Axis) - min) / range;
-				var scale = Mathf.Lerp(1f, Factor, t);
-
-				input.Points[i] = Center + ScalePerpendicular(local, Axis, scale);
-			}
+			input.Points.Clear();
+			input.Points.AddRange(tapered);
 
 			return input;
 		}
-
-		static float Get(Vector3 v, Axis3D axis) => axis switch { Axis3D.X => v.x, Axis3D.Y => v.y, _ => v.z };
-
-		static Vector3 ScalePerpendicular(Vector3 v, Axis3D axis, float scale) => axis switch
-		{
-			Axis3D.X => new Vector3(v.x, v.y * scale, v.z * scale),
-			Axis3D.Y => new Vector3(v.x * scale, v.y, v.z * scale),
-			_ => new Vector3(v.x * scale, v.y * scale, v.z),
-		};
 	}
 }

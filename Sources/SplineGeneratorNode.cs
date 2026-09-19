@@ -25,7 +25,9 @@ namespace Nodra
 	/// <summary> Like LineGeneratorNode, but PointCount points resampled along a Catmull-Rom curve through
 	/// ControlPoints instead of a straight line - points only, no faces, meant to feed CopyToPointsNode. Every
 	/// point's normal is Vector3.up regardless of the curve's own direction, same as LineGeneratorNode and for the
-	/// same reason: copies stay upright by default. </summary>
+	/// same reason: copies stay upright by default. Runs entirely in the NodraCore native library (see Native/
+	/// NodraCore/SplineGenerator.cs) - there's no managed fallback, same as DecimateNode's optional package:
+	/// without it, Process() produces no geometry at all and Warning explains why. </summary>
 	[Serializable]
 	public class SplineGeneratorNode : GeoNode
 	{
@@ -47,48 +49,19 @@ namespace Nodra
 
 		public override int InputCount => 0;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node produces no geometry until it is.";
+
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();
 
-			if (ControlPoints == null || ControlPoints.Count < 2)
+			if (ControlPoints == null || ControlPoints.Count < 2 || !NodraNative.IsAvailable)
 				return data;
 
-			var pointCount = Mathf.Max(2, PointCount);
-			var segments = Closed ? ControlPoints.Count : ControlPoints.Count - 1;
-
-			for (var i = 0; i < pointCount; i++)
-			{
-				var t = Closed ? i / (float) pointCount : i / (float) (pointCount - 1);
-				data.AddPoint(Sample(t * segments), Vector3.up, new Vector2(t, 0f));
-			}
+			NodraNative.SplineGenerator(data, ControlPoints, PointCount, Closed);
 
 			return data;
-		}
-
-		Vector3 Sample(float u)
-		{
-			var segments = Closed ? ControlPoints.Count : ControlPoints.Count - 1;
-			var segment = Mathf.Clamp(Mathf.FloorToInt(u), 0, segments - 1);
-			var t = u - segment;
-
-			return CatmullRom(ControlPointAt(segment - 1), ControlPointAt(segment), ControlPointAt(segment + 1), ControlPointAt(segment + 2), t);
-		}
-
-		// Open curves clamp to the first/last control point instead of extrapolating past them - the standard
-		// way to handle Catmull-Rom needing a point on each side of every segment, including the two end ones.
-		Vector3 ControlPointAt(int index)
-		{
-			var count = ControlPoints.Count;
-			return Closed ? ControlPoints[((index % count) + count) % count] : ControlPoints[Mathf.Clamp(index, 0, count - 1)];
-		}
-
-		static Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
-		{
-			var t2 = t * t;
-			var t3 = t2 * t;
-
-			return 0.5f * (2f * p1 + (-p0 + p2) * t + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2 + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
 		}
 	}
 }

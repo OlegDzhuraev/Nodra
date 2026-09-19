@@ -21,7 +21,9 @@ using UnityEngine;
 
 namespace Nodra
 {
-	/// <summary> Translates, rotates and scales every point of the input geometry. </summary>
+	/// <summary> Translates, rotates and scales every point of the input geometry. Runs entirely in the NodraCore
+	/// native library (see Native/NodraCore/Transform.cs) - there's no managed fallback, same as DecimateNode's
+	/// optional package: without it, Process() passes geometry through unchanged and Warning explains why. </summary>
 	[Serializable]
 	public class TransformNode : GeoNode
 	{
@@ -31,19 +33,20 @@ namespace Nodra
 		public Vector3 Rotation;
 		public Vector3 Scale = Vector3.one;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of transforming it.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null)
-				return null;
+			if (input == null || !NodraNative.IsAvailable)
+				return input;
 
-			var rotation = Quaternion.Euler(Rotation);
-			var matrix = Matrix4x4.TRS(Translation, rotation, Scale);
+			var (points, normals) = NodraNative.Transform(input, Translation, Rotation, Scale);
 
-			for (var i = 0; i < input.PointCount; i++)
-			{
-				input.Points[i] = matrix.MultiplyPoint3x4(input.Points[i]);
-				input.Normals[i] = rotation * input.Normals[i];
-			}
+			input.Points.Clear();
+			input.Points.AddRange(points);
+			input.Normals.Clear();
+			input.Normals.AddRange(normals);
 
 			return input;
 		}

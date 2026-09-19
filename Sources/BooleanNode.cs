@@ -28,11 +28,16 @@ namespace Nodra
 	}
 
 	/// <summary> Combines two closed, manifold shapes with a real CSG boolean - unlike MergeNode, which just
-	/// concatenates geometry, this actually cuts each input against the other (see GeoCsg for the BSP-tree
-	/// implementation). An open surface on either input (e.g. a bare GridGeneratorNode) has no well-defined
+	/// concatenates geometry, this actually cuts each input against the other via a BSP-tree CSG (see Native/
+	/// NodraCore/GeoCsg.cs). An open surface on either input (e.g. a bare GridGeneratorNode) has no well-defined
 	/// "inside", so results involving one are undefined. Heavy or pathological input (many small separate pieces,
-	/// e.g. CopyToPointsNode stamping hundreds of copies) can make this slow - past a minute, GeoCsg aborts with a
-	/// TimeoutException, which ProceduralMeshGenerator.Generate() catches and logs rather than propagating. </summary>
+	/// e.g. CopyToPointsNode stamping hundreds of copies) can make this slow - past a minute, the native side
+	/// aborts and this throws a TimeoutException, which ProceduralMeshGenerator.Generate() catches and logs
+	/// rather than propagating. Runs entirely in the NodraCore native library - there's no managed fallback: one
+	/// side unconnected still works (booleaning against nothing neither adds nor removes anything for Union/
+	/// Subtract, and has nothing in common with anything for Intersect), since that never needed native at all,
+	/// but a real boolean between two connected inputs produces no geometry without it, and Warning explains
+	/// why. </summary>
 	[Serializable]
 	public class BooleanNode : GeoNode
 	{
@@ -43,6 +48,9 @@ namespace Nodra
 		public override int InputCount => 2;
 
 		public override string GetInputPortName(int index) => index == 0 ? "A" : "B";
+
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - a real boolean (both inputs connected) produces no geometry until it is.";
 
 		public override GeoData Process(GeoData[] inputs)
 		{
@@ -57,13 +65,10 @@ namespace Nodra
 			if (a == null || b == null)
 				return Operation == BooleanOperation.Intersect ? new GeoData() : a ?? b;
 
-			return Operation switch
-			{
-				BooleanOperation.Union => GeoCsg.Union(a, b),
-				BooleanOperation.Subtract => GeoCsg.Subtract(a, b),
-				BooleanOperation.Intersect => GeoCsg.Intersect(a, b),
-				_ => a,
-			};
+			if (!NodraNative.IsAvailable)
+				return new GeoData();
+
+			return NodraNative.Csg(a, b, (int) Operation);
 		}
 	}
 }

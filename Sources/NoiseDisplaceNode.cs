@@ -23,7 +23,16 @@ namespace Nodra
 {
 	/// <summary> Displaces every point by 2D noise sampled from its XZ position - Perlin for smooth rolling bumps,
 	/// Voronoi for cellular/rocky facets. GeoMeshBuilder recalculates normals after baking, so displacement
-	/// doesn't need to keep normals in sync itself. </summary>
+	/// doesn't need to keep normals in sync itself. Runs entirely in the NodraCore native library (see Native/
+	/// NodraCore/NoiseDisplace.cs) - there's no managed fallback, same as DecimateNode's optional package:
+	/// without it, Process() passes geometry through unchanged and Warning explains why.
+	///
+	/// Voronoi's native result is a faithful, bit-identical port of what this node always computed itself.
+	/// Perlin is NOT - UnityEngine.Mathf.PerlinNoise runs inside Unity's own closed-source native engine and can't
+	/// be reproduced outside it (confirmed against Unity's own forums - not just an assumption), so native uses a
+	/// different, from-scratch gradient noise instead. A graph already using NoiseType.Perlin will look visibly
+	/// different once native takes over - same general character (smooth rolling bumps), different specific
+	/// bumps - a deliberate, discussed tradeoff in exchange for this node working outside Unity at all. </summary>
 	[Serializable]
 	public class NoiseDisplaceNode : GeoNode
 	{
@@ -37,55 +46,20 @@ namespace Nodra
 		public Vector2 Offset;
 		public bool AlongNormal = true;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node passes geometry through unchanged instead of displacing.";
+
 		public override GeoData Process(GeoData input)
 		{
-			if (input == null)
-				return null;
+			if (input == null || !NodraNative.IsAvailable)
+				return input;
 
-			for (var i = 0; i < input.PointCount; i++)
-			{
-				var point = input.Points[i];
-				var x = point.x * Frequency + Offset.x;
-				var z = point.z * Frequency + Offset.y;
-				var sample = (Type == NoiseType.Voronoi ? VoronoiNoise(x, z) : Mathf.PerlinNoise(x, z)) * 2f - 1f;
-				var direction = AlongNormal ? input.Normals[i] : Vector3.up;
+			var displaced = NodraNative.NoiseDisplace(input, (int) Type, Amplitude, Frequency, Offset.x, Offset.y, AlongNormal);
 
-				input.Points[i] = point + direction * (sample * Amplitude);
-			}
+			input.Points.Clear();
+			input.Points.AddRange(displaced);
 
 			return input;
-		}
-
-		// Cellular/Worley noise: distance from (x, z) to the nearest of one pseudo-random "feature point" per grid
-		// cell, searched across the 3x3 neighborhood so a point near a cell edge still finds the true nearest one.
-		// Clamped to [0, 1] - the distance to the nearest feature point rarely exceeds that in practice.
-		static float VoronoiNoise(float x, float z)
-		{
-			var cellX = Mathf.FloorToInt(x);
-			var cellZ = Mathf.FloorToInt(z);
-			var localX = x - cellX;
-			var localZ = z - cellZ;
-			var minDistance = float.MaxValue;
-
-			for (var dz = -1; dz <= 1; dz++)
-			for (var dx = -1; dx <= 1; dx++)
-			{
-				var feature = Hash(cellX + dx, cellZ + dz);
-				var offset = new Vector2(dx + feature.x - localX, dz + feature.y - localZ);
-				minDistance = Mathf.Min(minDistance, offset.magnitude);
-			}
-
-			return Mathf.Clamp01(minDistance);
-		}
-
-		// Deterministic pseudo-random point within a grid cell - the standard sin/fract hash trick: fast, stable
-		// for any integer cell coordinate, not meant to be cryptographically uniform.
-		static Vector2 Hash(int cellX, int cellZ)
-		{
-			var x = Mathf.Sin(cellX * 127.1f + cellZ * 311.7f) * 43758.5453f;
-			var y = Mathf.Sin(cellX * 269.5f + cellZ * 183.3f) * 43758.5453f;
-
-			return new Vector2(x - Mathf.Floor(x), y - Mathf.Floor(y));
 		}
 	}
 }

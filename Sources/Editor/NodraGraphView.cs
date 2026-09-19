@@ -27,17 +27,22 @@ using UnityEngine.UIElements;
 
 namespace Nodra
 {
-	/// <summary> The canvas that draws and edits one ProceduralMeshGenerator's GeoGraph - nodes and edges are
-	/// rebuilt from the component's serialized state on bind/undo, and every edit (add/remove/connect/move node)
-	/// writes straight back into that same GeoGraph instance via Undo.RecordObject, so it behaves like any other
-	/// Inspector edit (Undo, prefab overrides, multi-scene). Beyond syncing that data, most edits are left for
-	/// GraphView's own default behaviour to apply visually (adding the new edge, removing a deleted node's
-	/// elements, ...) - forcing a full re-population there too would fight GraphView's own bookkeeping. </summary>
+	/// <summary> The canvas that draws and edits one GeoGraph - either a ProceduralMeshGenerator component's own, or
+	/// a standalone GeoGraphAsset's (see SubGraphNode). Nodes and edges are rebuilt from the owner's serialized
+	/// state on bind/undo, and every edit (add/remove/connect/move node) writes straight back into that same
+	/// GeoGraph instance via Undo.RecordObject, so it behaves like any other Inspector edit (Undo, prefab overrides,
+	/// multi-scene). Beyond syncing that data, most edits are left for GraphView's own default behaviour to apply
+	/// visually (adding the new edge, removing a deleted node's elements, ...) - forcing a full re-population there
+	/// too would fight GraphView's own bookkeeping. </summary>
 	public class NodraGraphView : GraphView, IEdgeConnectorListener
 	{
 		readonly Dictionary<string, NodraNodeView> viewsById = new ();
 
-		ProceduralMeshGenerator generator;
+		// owner is whichever UnityEngine.Object actually holds `graph` (a ProceduralMeshGenerator or a
+		// GeoGraphAsset) - kept separate from graph itself since Undo.RecordObject/EditorUtility.SetDirty/
+		// SerializedObject all need the owning Object, not the plain [Serializable] GeoGraph nested inside it.
+		UnityEngine.Object owner;
+		GeoGraph graph;
 		SerializedObject serializedObject;
 		Action onGraphChanged;
 
@@ -95,10 +100,11 @@ namespace Nodra
 			evt.StopPropagation();
 		}
 
-		public void Bind(ProceduralMeshGenerator target, Action onChanged)
+		public void Bind(UnityEngine.Object newOwner, GeoGraph newGraph, Action onChanged)
 		{
-			generator = target;
-			serializedObject = target != null ? new SerializedObject(target) : null;
+			owner = newOwner;
+			graph = newGraph;
+			serializedObject = owner != null ? new SerializedObject(owner) : null;
 			onGraphChanged = onChanged;
 
 			Populate();
@@ -142,17 +148,20 @@ namespace Nodra
 
 			viewsById.Clear();
 
-			if (generator == null || generator.Graph == null)
+			if (owner == null || graph == null)
 				return;
 
 			serializedObject.Update();
 
-			var graphProperty = serializedObject.FindProperty(nameof(ProceduralMeshGenerator.Graph));
+			// "Graph" (not nameof(ProceduralMeshGenerator.Graph)) since owner can be either a ProceduralMeshGenerator
+			// or a GeoGraphAsset - both happen to name their own GeoGraph field exactly this, which is what this
+			// lookup actually depends on, not which concrete type owner is.
+			var graphProperty = serializedObject.FindProperty("Graph");
 			var nodesProperty = graphProperty.FindPropertyRelative(nameof(GeoGraph.Nodes));
 
-			for (var i = 0; i < generator.Graph.Nodes.Count; i++)
+			for (var i = 0; i < graph.Nodes.Count; i++)
 			{
-				var node = generator.Graph.Nodes[i];
+				var node = graph.Nodes[i];
 				if (node == null)
 					continue;
 
@@ -161,7 +170,7 @@ namespace Nodra
 				AddElement(view);
 			}
 
-			foreach (var edge in generator.Graph.Edges)
+			foreach (var edge in graph.Edges)
 			{
 				if (!viewsById.TryGetValue(edge.FromNodeId, out var from) || !viewsById.TryGetValue(edge.ToNodeId, out var to))
 					continue;
@@ -182,7 +191,7 @@ namespace Nodra
 			foreach (var view in viewsById.Values)
 				view.RefreshPorts();
 
-			foreach (var geoGroup in generator.Graph.Groups)
+			foreach (var geoGroup in graph.Groups)
 			{
 				var groupView = new Group { title = geoGroup.Title, userData = geoGroup };
 				AddElement(groupView);
@@ -197,7 +206,7 @@ namespace Nodra
 
 		void RefreshOutputHighlight()
 		{
-			var outputId = generator?.Graph?.GetOutputNode()?.Id;
+			var outputId = graph?.GetOutputNode()?.Id;
 
 			foreach (var view in viewsById.Values)
 				view.SetIsOutput(view.Node.Id == outputId);
@@ -226,7 +235,7 @@ namespace Nodra
 
 		public override void BuildContextualMenu(ContextualMenuPopulateEvent evt)
 		{
-			if (generator == null)
+			if (owner == null || graph == null)
 				return;
 
 			var position = contentViewContainer.WorldToLocal(evt.mousePosition);
@@ -255,10 +264,10 @@ namespace Nodra
 			if (nodeViews.Count == 0)
 				return;
 
-			Undo.RecordObject(generator, "Group Selection");
+			Undo.RecordObject(owner, "Group Selection");
 
 			var geoGroup = new GeoGroup();
-			generator.Graph.Groups.Add(geoGroup);
+			graph.Groups.Add(geoGroup);
 
 			var groupView = new Group { title = geoGroup.Title, userData = geoGroup };
 			AddElement(groupView);
@@ -266,7 +275,7 @@ namespace Nodra
 			foreach (var view in nodeViews)
 				groupView.AddElement(view);
 
-			EditorUtility.SetDirty(generator);
+			EditorUtility.SetDirty(owner);
 			onGraphChanged?.Invoke();
 		}
 
@@ -293,25 +302,25 @@ namespace Nodra
 
 		void CreateNode(Type type, Vector2 position, NodraNodeView sourceView, NodraNodeView targetView, int targetPortIndex)
 		{
-			Undo.RecordObject(generator, "Add Node");
+			Undo.RecordObject(owner, "Add Node");
 
 			var node = (GeoNode) Activator.CreateInstance(type);
 			node.Position = position;
-			generator.Graph.Nodes.Add(node);
+			graph.Nodes.Add(node);
 
 			// Dragged out of sourceView's output - wire it into the new node's first input, if it has one
 			// (a Generator dragged this way never does, but the search menu already excludes those in that case).
 			if (sourceView != null && node.InputCount > 0)
-				generator.Graph.Edges.Add(new GeoEdge { FromNodeId = sourceView.Node.Id, ToNodeId = node.Id, ToPortIndex = 0 });
+				graph.Edges.Add(new GeoEdge { FromNodeId = sourceView.Node.Id, ToNodeId = node.Id, ToPortIndex = 0 });
 
 			// Dragged out of targetView's input (backwards, looking for a source) - wire the new node's output into it.
 			if (targetView != null)
 			{
-				generator.Graph.Edges.RemoveAll(e => e.ToNodeId == targetView.Node.Id && e.ToPortIndex == targetPortIndex);
-				generator.Graph.Edges.Add(new GeoEdge { FromNodeId = node.Id, ToNodeId = targetView.Node.Id, ToPortIndex = targetPortIndex });
+				graph.Edges.RemoveAll(e => e.ToNodeId == targetView.Node.Id && e.ToPortIndex == targetPortIndex);
+				graph.Edges.Add(new GeoEdge { FromNodeId = node.Id, ToNodeId = targetView.Node.Id, ToPortIndex = targetPortIndex });
 			}
 
-			EditorUtility.SetDirty(generator);
+			EditorUtility.SetDirty(owner);
 			Populate();
 			onGraphChanged?.Invoke();
 		}
@@ -360,7 +369,7 @@ namespace Nodra
 		// dragged from an input (backwards) needs a source, which every node has exactly one of.
 		public void OnDropOutsidePort(Edge edge, Vector2 position)
 		{
-			if (generator == null)
+			if (owner == null || graph == null)
 				return;
 
 			var sourceView = edge.output?.node as NodraNodeView;
@@ -406,29 +415,43 @@ namespace Nodra
 		GraphViewChange OnGraphViewChanged(GraphViewChange change)
 		{
 			var dirty = false;
+			var structural = false; // could actually change what the graph computes - a move alone never does
 			var nodeRemoved = false;
 
 			if (change.edgesToCreate != null)
 				foreach (var edge in change.edgesToCreate)
-					dirty |= SyncEdgeCreated(edge);
+				{
+					var created = SyncEdgeCreated(edge);
+					dirty |= created;
+					structural |= created;
+				}
 
 			if (change.elementsToRemove != null)
 				foreach (var element in change.elementsToRemove)
 				{
 					nodeRemoved |= element is NodraNodeView;
-					dirty |= SyncElementRemoved(element);
+
+					var removed = SyncElementRemoved(element);
+					dirty |= removed;
+					structural |= removed;
 				}
 
+			// Position doesn't feed into GeoGraph.ComputeNodeHash at all (see GeoGraph.cs) - still needs Undo/
+			// SetDirty below so the new layout is actually saved, but it's not "structural" the way an edge or a
+			// node coming or going is, so it alone shouldn't call onGraphChanged (Generate() would just walk the
+			// whole graph's hashes to confirm nothing changed, every single drag frame, for no reason).
 			if (change.movedElements != null)
 				dirty |= SyncElementsMoved(change.movedElements);
 
 			if (dirty)
 			{
-				EditorUtility.SetDirty(generator);
+				EditorUtility.SetDirty(owner);
 				serializedObject.Update();
 				RefreshOutputHighlight();
-				onGraphChanged?.Invoke();
 			}
+
+			if (structural)
+				onGraphChanged?.Invoke();
 
 			// A removed node shifts every later node's index in Graph.Nodes - every surviving node's fields are
 			// still bound to their old index-based SerializedProperty path (Array.data[N]...), which is now either
@@ -457,11 +480,11 @@ namespace Nodra
 			if (portIndex < 0)
 				return false;
 
-			Undo.RecordObject(generator, "Connect Nodes");
+			Undo.RecordObject(owner, "Connect Nodes");
 
 			// A port models a single argument slot - wiring something new into it replaces whatever fed it before.
-			generator.Graph.Edges.RemoveAll(e => e.ToNodeId == to.Node.Id && e.ToPortIndex == portIndex);
-			generator.Graph.Edges.Add(new GeoEdge { FromNodeId = from.Node.Id, ToNodeId = to.Node.Id, ToPortIndex = portIndex });
+			graph.Edges.RemoveAll(e => e.ToNodeId == to.Node.Id && e.ToPortIndex == portIndex);
+			graph.Edges.Add(new GeoEdge { FromNodeId = from.Node.Id, ToNodeId = to.Node.Id, ToPortIndex = portIndex });
 
 			return true;
 		}
@@ -471,22 +494,22 @@ namespace Nodra
 			switch (element)
 			{
 				case NodraNodeView nodeView:
-					Undo.RecordObject(generator, "Remove Node");
-					generator.Graph.Nodes.Remove(nodeView.Node);
-					generator.Graph.Edges.RemoveAll(e => e.FromNodeId == nodeView.Node.Id || e.ToNodeId == nodeView.Node.Id);
+					Undo.RecordObject(owner, "Remove Node");
+					graph.Nodes.Remove(nodeView.Node);
+					graph.Edges.RemoveAll(e => e.FromNodeId == nodeView.Node.Id || e.ToNodeId == nodeView.Node.Id);
 					viewsById.Remove(nodeView.Node.Id);
 					nodeView.Unbind();
 					return true;
 
 				case Edge edgeView when edgeView.output?.node is NodraNodeView from && edgeView.input?.node is NodraNodeView to:
 					var portIndex = Array.IndexOf(to.InputPorts, edgeView.input);
-					Undo.RecordObject(generator, "Disconnect Nodes");
-					generator.Graph.Edges.RemoveAll(e => e.FromNodeId == from.Node.Id && e.ToNodeId == to.Node.Id && e.ToPortIndex == portIndex);
+					Undo.RecordObject(owner, "Disconnect Nodes");
+					graph.Edges.RemoveAll(e => e.FromNodeId == from.Node.Id && e.ToNodeId == to.Node.Id && e.ToPortIndex == portIndex);
 					return true;
 
 				case Group groupView when groupView.userData is GeoGroup geoGroup:
-					Undo.RecordObject(generator, "Remove Group");
-					generator.Graph.Groups.Remove(geoGroup);
+					Undo.RecordObject(owner, "Remove Group");
+					graph.Groups.Remove(geoGroup);
 					return true;
 
 				default:
@@ -504,7 +527,7 @@ namespace Nodra
 					continue;
 
 				if (!any)
-					Undo.RecordObject(generator, "Move Node");
+					Undo.RecordObject(owner, "Move Node");
 
 				any = true;
 				view.Node.Position = view.GetPosition().position;
@@ -518,9 +541,9 @@ namespace Nodra
 			if (populating || group.userData is not GeoGroup geoGroup || geoGroup.Title == title)
 				return;
 
-			Undo.RecordObject(generator, "Rename Group");
+			Undo.RecordObject(owner, "Rename Group");
 			geoGroup.Title = title;
-			EditorUtility.SetDirty(generator);
+			EditorUtility.SetDirty(owner);
 			onGraphChanged?.Invoke();
 		}
 
@@ -537,7 +560,7 @@ namespace Nodra
 					continue;
 
 				if (!dirty)
-					Undo.RecordObject(generator, "Group Node(s)");
+					Undo.RecordObject(owner, "Group Node(s)");
 
 				dirty = true;
 				geoGroup.NodeIds.Add(view.Node.Id);
@@ -545,7 +568,7 @@ namespace Nodra
 
 			if (dirty)
 			{
-				EditorUtility.SetDirty(generator);
+				EditorUtility.SetDirty(owner);
 				onGraphChanged?.Invoke();
 			}
 		}
@@ -563,14 +586,14 @@ namespace Nodra
 					continue;
 
 				if (!dirty)
-					Undo.RecordObject(generator, "Ungroup Node(s)");
+					Undo.RecordObject(owner, "Ungroup Node(s)");
 
 				dirty = true;
 			}
 
 			if (dirty)
 			{
-				EditorUtility.SetDirty(generator);
+				EditorUtility.SetDirty(owner);
 				onGraphChanged?.Invoke();
 			}
 		}
@@ -583,7 +606,7 @@ namespace Nodra
 		// to fresh ones on paste.
 		string SerializeSelection(IEnumerable<GraphElement> elements)
 		{
-			if (generator == null)
+			if (owner == null || graph == null)
 				return string.Empty;
 
 			var payload = new ClipboardPayload();
@@ -604,7 +627,7 @@ namespace Nodra
 				});
 			}
 
-			foreach (var edge in generator.Graph.Edges)
+			foreach (var edge in graph.Edges)
 				if (copiedIds.Contains(edge.FromNodeId) && copiedIds.Contains(edge.ToNodeId))
 					payload.Edges.Add(new ClipboardEdge { FromId = edge.FromNodeId, ToId = edge.ToNodeId, ToPortIndex = edge.ToPortIndex });
 
@@ -617,7 +640,7 @@ namespace Nodra
 
 		void UnserializeAndPaste(string operationName, string data)
 		{
-			if (generator == null)
+			if (owner == null || graph == null)
 				return;
 
 			ClipboardPayload payload;
@@ -634,7 +657,7 @@ namespace Nodra
 			if (payload?.Nodes == null || payload.Nodes.Count == 0)
 				return;
 
-			Undo.RecordObject(generator, operationName);
+			Undo.RecordObject(owner, operationName);
 
 			var idRemap = new Dictionary<string, string>();
 			var pastedIds = new List<string>();
@@ -650,15 +673,15 @@ namespace Nodra
 				node.Position = clipboardNode.Position + PasteOffset;
 
 				idRemap[clipboardNode.OriginalId] = node.Id;
-				generator.Graph.Nodes.Add(node);
+				graph.Nodes.Add(node);
 				pastedIds.Add(node.Id);
 			}
 
 			foreach (var clipboardEdge in payload.Edges)
 				if (idRemap.TryGetValue(clipboardEdge.FromId, out var from) && idRemap.TryGetValue(clipboardEdge.ToId, out var to))
-					generator.Graph.Edges.Add(new GeoEdge { FromNodeId = from, ToNodeId = to, ToPortIndex = clipboardEdge.ToPortIndex });
+					graph.Edges.Add(new GeoEdge { FromNodeId = from, ToNodeId = to, ToPortIndex = clipboardEdge.ToPortIndex });
 
-			EditorUtility.SetDirty(generator);
+			EditorUtility.SetDirty(owner);
 			Populate();
 
 			ClearSelection();

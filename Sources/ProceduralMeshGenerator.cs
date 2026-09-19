@@ -42,11 +42,33 @@ namespace Nodra
 		/// the graph changes without a Generate(), so it can briefly go stale between an edit and the next bake. </summary>
 		public GeoData LastEvaluatedData { get; private set; }
 
+		// Not serialized on purpose (see GeoGraph.resultCache) - resets on domain reload, at worst costing one
+		// redundant bake right after, same as the node cache itself.
+		string lastBakedHash;
+		bool hasBakedOnce;
+
 		[ContextMenu("Generate")]
 		public void Generate()
 		{
 			if (!meshFilter)
 				meshFilter = GetComponent<MeshFilter>();
+
+			// OnValidate can't tell which field changed, so AutoGenerate calls this on every edit anywhere in the
+			// graph - including a node whose output isn't wired to anything the actual output depends on.
+			// ComputeOutputHash() walks just the reachable chain's own field values - no Process(), no GeoData, no
+			// Clone() - so checking it BEFORE calling Evaluate() matters: even a fully cached Evaluate() (nothing
+			// actually recomputed) still clones every reused node's result along the chain to keep resultCache's
+			// own copies pristine, and that clone cost scales with the mesh itself - the difference between "cheap"
+			// and "visibly laggy while dragging a slider" on anything past a trivial mesh.
+			var hash = Graph.ComputeOutputHash();
+
+			if (hasBakedOnce && hash == lastBakedHash)
+			{
+				if (GeoGraph.LogCacheStats)
+					Debug.Log($"Nodra: Generate() skipped entirely - output hash unchanged ({hash})", this);
+
+				return;
+			}
 
 			GeoData data;
 
@@ -66,6 +88,13 @@ namespace Nodra
 
 			LastEvaluatedData = data;
 
+			if (GeoGraph.LogCacheStats)
+				Debug.Log($"Nodra: Generate() baking - output hash {(hasBakedOnce ? "changed" : "first bake")} " +
+					$"({lastBakedHash} -> {hash})", this);
+
+			hasBakedOnce = true;
+			lastBakedHash = hash;
+
 			meshFilter.sharedMesh = data != null ? GeoMeshBuilder.Build(data, gameObject.name) : null;
 		}
 
@@ -78,6 +107,16 @@ namespace Nodra
 		void Reset() => Graph.Nodes.Add(new GeometryOutputNode());
 
 		bool regenerateQueued;
+
+		// EditorApplication.delayCall silently drops its subscriber list across a domain reload (a script
+		// recompile) - if OnValidate had just set regenerateQueued and registered DelayedGenerate, and a reload
+		// happened before the next editor idle tick got a chance to actually fire it, DelayedGenerate never runs
+		// and nothing else ever resets regenerateQueued back to false. Every OnValidate call after that permanently
+		// bails out on its own first line, silently breaking AutoGenerate for the rest of the session (until
+		// something else happens to reset the field, e.g. yet another reload) with no error to point at why. Unity
+		// always calls OnEnable again right after a reload completes, so resetting here guarantees a clean slate
+		// regardless of what a reload interrupted.
+		void OnEnable() => regenerateQueued = false;
 
 		// Covers edits to a node's own field values, which reach here through the normal SerializedProperty ->
 		// ApplyModifiedProperties -> OnValidate path (NodraNodeView binds its fields the same way an Inspector

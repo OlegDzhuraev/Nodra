@@ -1,0 +1,159 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17568ebf7fbe5eb4082a1a894257feea, type: 3}
+  m_Name: ExampleSubGraph
+  m_EditorClassIdentifier: Nodra::Nodra.GeoGraphAsset
+  Graph:
+    Nodes:
+    - rid: 3788187343343583287
+    - rid: 3788187343343583288
+    - rid: 3788187343343583289
+    - rid: 3788187343343583290
+    - rid: 3788187343343583291
+    - rid: 3788187343343583471
+    - rid: 3788187343343583473
+    - rid: 3788187368005304327
+    - rid: 3788187368005304382
+    Edges:
+    - FromNodeId: ddb24367e7cd47a099031f437a0a2e92
+      ToNodeId: 5d0fbdf9fa984fa3bd619d1a43ea47e2
+      ToPortIndex: 0
+    - FromNodeId: 5d0fbdf9fa984fa3bd619d1a43ea47e2
+      ToNodeId: 33bde81e4b624142bc52d916359a375d
+      ToPortIndex: 0
+    - FromNodeId: 33bde81e4b624142bc52d916359a375d
+      ToNodeId: deaadd25dc8a40219bc5ac935742b606
+      ToPortIndex: 0
+    - FromNodeId: 33bde81e4b624142bc52d916359a375d
+      ToNodeId: fc7dcc6eb47a4ae78608711bfc428f4e
+      ToPortIndex: 0
+    - FromNodeId: 5919f46173fc4ad29b59d590eb17f620
+      ToNodeId: f2b937a0e9874eab9a37fd779c9d35c5
+      ToPortIndex: 0
+    - FromNodeId: f2b937a0e9874eab9a37fd779c9d35c5
+      ToNodeId: ddb24367e7cd47a099031f437a0a2e92
+      ToPortIndex: 0
+    - FromNodeId: bef15062467a4244ac91d18a59cd0942
+      ToNodeId: f2b937a0e9874eab9a37fd779c9d35c5
+      ToPortIndex: 1
+    Groups: []
+  references:
+    version: 2
+    RefIds:
+    - rid: 3788187343343583287
+      type: {class: GeometryOutputNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: fc7dcc6eb47a4ae78608711bfc428f4e
+        Position: {x: 1195.4286, y: -252.57143}
+    - rid: 3788187343343583288
+      type: {class: BoxGeneratorNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: 5919f46173fc4ad29b59d590eb17f620
+        Position: {x: -617.7143, y: -178.28572}
+        Size: {x: 0.5, y: 3.21, z: 1}
+    - rid: 3788187343343583289
+      type: {class: SubdivideNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 0
+        Id: ddb24367e7cd47a099031f437a0a2e92
+        Position: {x: -342.2857, y: -188}
+        Iterations: 2
+    - rid: 3788187343343583290
+      type: {class: TransformNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: 5d0fbdf9fa984fa3bd619d1a43ea47e2
+        Position: {x: 29.142857, y: -178.28572}
+        Translation: {x: 0, y: 0, z: 0}
+        Rotation: {x: 0, y: 0, z: 0}
+        Scale: {x: 7.79, y: 16.27, z: 12.92}
+    - rid: 3788187343343583291
+      type: {class: BendNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: 33bde81e4b624142bc52d916359a375d
+        Position: {x: 436.04715, y: -50.632854}
+        Axis: 1
+        Center: {x: 0, y: 0, z: 0}
+        Angle: -52
+    - rid: 3788187343343583471
+      type: {class: VertexColorNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: 45342a44c2494a5d8106af44eb2227d7
+        Position: {x: 1098.2858, y: -20.571428}
+        Mode: 1
+        Color: {r: 1, g: 1, b: 1, a: 1}
+        Source: 0
+        Axis: 1
+        Gradient:
+          serializedVersion: 2
+          key0: {r: 0, g: 0, b: 0, a: 1}
+          key1: {r: 1, g: 1, b: 1, a: 1}
+          key2: {r: 0, g: 0, b: 0, a: 0}
+          key3: {r: 0, g: 0, b: 0, a: 0}
+          key4: {r: 0, g: 0, b: 0, a: 0}
+          key5: {r: 0, g: 0, b: 0, a: 0}
+          key6: {r: 0, g: 0, b: 0, a: 0}
+          key7: {r: 0, g: 0, b: 0, a: 0}
+          ctime0: 24066
+          ctime1: 65535
+          ctime2: 0
+          ctime3: 0
+          ctime4: 0
+          ctime5: 0
+          ctime6: 0
+          ctime7: 0
+          atime0: 0
+          atime1: 65535
+          atime2: 0
+          atime3: 0
+          atime4: 0
+          atime5: 0
+          atime6: 0
+          atime7: 0
+          m_Mode: 0
+          m_ColorSpace: 0
+          m_NumColorKeys: 2
+          m_NumAlphaKeys: 2
+        Bounds:
+          m_Center: {x: 0, y: 0, z: 0}
+          m_Extent: {x: 0.5, y: 0.5, z: 0.5}
+        ClampOutsideBounds: 0
+        Blend: 0
+    - rid: 3788187343343583473
+      type: {class: ScatterNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: deaadd25dc8a40219bc5ac935742b606
+        Position: {x: 730.2857, y: -80}
+        PointCount: 100
+        RandomSeed: 0
+    - rid: 3788187368005304327
+      type: {class: BooleanNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: f2b937a0e9874eab9a37fd779c9d35c5
+        Position: {x: -297.14285, y: 11.42857}
+        Operation: 0
+    - rid: 3788187368005304382
+      type: {class: TorusGeneratorNode, ns: Nodra, asm: Nodra}
+      data:
+        Enabled: 1
+        Id: bef15062467a4244ac91d18a59cd0942
+        Position: {x: -604, y: 11.42857}
+        MajorRadius: 1
+        MinorRadius: 0.25
+        MajorSegments: 24
+        MinorSegments: 12

@@ -16,6 +16,9 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+using System;
+using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.Experimental.GraphView;
 using UnityEditor.UIElements;
@@ -56,11 +59,8 @@ namespace Nodra
 				AddToClassList("nodra-node-generator");
 
 			// Node's default USS gives the card a semi-transparent background - fine over a plain grid, but
-			// distracting once nodes overlap/stack, so it's forced opaque here. Widened past Node's fairly narrow
-			// default too, since a Vector2/Vector3 field's sub-fields (Offset's X/Y, ...) get squeezed unreadably
-			// thin otherwise - see also the label-width rule in NodraGraphView.uss. Capped on the other end so a
-			// long GeoNode.Warning string (which wraps, see BuildWarning) can't stretch the card out sideways
-			// instead of just growing taller.
+			// distracting once nodes overlap/stack, so it's forced opaque here. maxWidth stops a long
+			// GeoNode.Warning string (wraps, see BuildWarning) from stretching the card sideways instead of down.
 			style.minWidth = 260f;
 			style.maxWidth = 320f;
 			var opaqueBackground = new Color(0.13f, 0.13f, 0.13f, 1f);
@@ -111,6 +111,7 @@ namespace Nodra
 
 			BuildWarning(node);
 			BuildFieldEditors(nodeProperty);
+			BuildEditableAssetButton(node, nodeProperty);
 
 			SetPosition(new Rect(node.Position, Vector2.zero));
 			RefreshExpandedState();
@@ -144,6 +145,35 @@ namespace Nodra
 			extensionContainer.Add(warning);
 		}
 
+		// SubGraphNode-style nodes (GeoNode.EditableAssetFieldName) get a button that jumps straight into editing
+		// whatever UnityEngine.Object asset that field currently holds, instead of having to hunt it down in the
+		// Project window - tracks the same SerializedProperty its own PropertyField (built just above, in
+		// BuildFieldEditors) is bound to, so it live-enables the moment something's actually assigned rather than
+		// needing this node view rebuilt first.
+		void BuildEditableAssetButton(GeoNode node, SerializedProperty nodeProperty)
+		{
+			var fieldName = node.EditableAssetFieldName;
+			if (string.IsNullOrEmpty(fieldName))
+				return;
+
+			var property = nodeProperty.FindPropertyRelative(fieldName);
+			if (property == null)
+				return;
+
+			var button = new Button { text = "Open" };
+			button.clicked += () =>
+			{
+				if (property.objectReferenceValue is GeoGraphAsset graphAsset)
+					NodraGraphWindow.OpenAsset(graphAsset);
+			};
+
+			void Refresh() => button.SetEnabled(property.objectReferenceValue != null);
+
+			Refresh();
+			button.TrackPropertyValue(property, _ => Refresh());
+			extensionContainer.Add(button);
+		}
+
 		void BuildFieldEditors(SerializedProperty nodeProperty)
 		{
 			var child = nodeProperty.Copy();
@@ -158,10 +188,100 @@ namespace Nodra
 				if (child.name is "Enabled" or "Id" or "Position")
 					continue;
 
-				var field = new PropertyField(child.Copy());
-				field.BindProperty(child.Copy());
+				var field = CreateVectorField(child) ?? CreateDefaultField(child);
 				extensionContainer.Add(field);
+
+				BindShowIf(field, nodeProperty, child.name);
 			}
+		}
+
+		static VisualElement CreateDefaultField(SerializedProperty property)
+		{
+			var field = new PropertyField(property.Copy());
+			field.BindProperty(property.Copy());
+			return field;
+		}
+
+		// PropertyField's default Vector2/Vector3(Int) control packs X/Y/Z into one row that never stretches to
+		// the node's width - stacking each axis as its own full-width field sidesteps that. Returns null (falling
+		// back to CreateDefaultField) for a field with a PropertyAttribute, so a CustomPropertyDrawer on it (e.g.
+		// MinVector2IntAttribute's clamp) still runs instead of being silently skipped.
+		VisualElement CreateVectorField(SerializedProperty property)
+		{
+			string[] axisNames = property.propertyType switch
+			{
+				SerializedPropertyType.Vector2 or SerializedPropertyType.Vector2Int => new[] { "x", "y" },
+				SerializedPropertyType.Vector3 or SerializedPropertyType.Vector3Int => new[] { "x", "y", "z" },
+				_ => null,
+			};
+
+			if (axisNames == null)
+				return null;
+
+			var hasPropertyAttribute = Node.GetType()
+				.GetField(property.name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+				?.GetCustomAttributes<PropertyAttribute>()
+				.Any() ?? false;
+
+			if (hasPropertyAttribute)
+				return null;
+
+			var isInt = property.propertyType is SerializedPropertyType.Vector2Int or SerializedPropertyType.Vector3Int;
+
+			var container = new VisualElement();
+			container.AddToClassList("nodra-node-vector-field");
+
+			var header = new Label(property.displayName);
+			header.AddToClassList("unity-base-field__label");
+			container.Add(header);
+
+			foreach (var axisName in axisNames)
+			{
+				var axisProperty = property.FindPropertyRelative(axisName);
+				var axisLabel = axisName.ToUpperInvariant();
+
+				if (isInt)
+				{
+					var axisField = new IntegerField(axisLabel);
+					axisField.BindProperty(axisProperty);
+					container.Add(axisField);
+				}
+				else
+				{
+					var axisField = new FloatField(axisLabel);
+					axisField.BindProperty(axisProperty);
+					container.Add(axisField);
+				}
+			}
+
+			return container;
+		}
+
+		// VertexColorNode's Gradient/Bounds/Axis only make sense for some Mode/Source combos - rather than every
+		// field always showing regardless of what the node actually uses it for, [ShowIf] on the field declares
+		// which sibling value(s) it needs, and this hides/shows it live as those siblings change. Generic over any
+		// GeoNode field, not just VertexColorNode's.
+		void BindShowIf(VisualElement field, SerializedProperty nodeProperty, string fieldName)
+		{
+			var conditions = Node.GetType()
+				.GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+				?.GetCustomAttributes<ShowIfAttribute>()
+				.Select(showIf => (property: nodeProperty.FindPropertyRelative(showIf.Field), showIf.Values))
+				.Where(condition => condition.property != null)
+				.ToArray();
+
+			if (conditions == null || conditions.Length == 0)
+				return;
+
+			void Refresh() => field.style.display =
+				conditions.All(c => c.Values.Any(v => c.property.intValue == Convert.ToInt32(v)))
+					? DisplayStyle.Flex
+					: DisplayStyle.None;
+
+			foreach (var condition in conditions)
+				field.TrackPropertyValue(condition.property, _ => Refresh());
+
+			Refresh();
 		}
 
 		/// <summary> "GridGeneratorNode" -> "Grid Generator" - shared with NodraGraphView's "Create Node" menu so

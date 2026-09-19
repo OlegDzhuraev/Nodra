@@ -58,6 +58,21 @@ namespace Nodra
 		/// anyone having to open the Inspector to notice. </summary>
 		public virtual string Warning => null;
 
+		/// <summary> Null for every node except SubGraphNode - extra content this node's Process() output depends
+		/// on that GeoGraph.ComputeNodeHash's JsonUtility-based field hash can't see, folded into that hash so
+		/// GeoGraph.resultCache still invalidates correctly. SubGraphNode needs this because its SubGraph field is
+		/// a UnityEngine.Object reference: JsonUtility can't be relied on to capture which asset that is, and even
+		/// if it could, that says nothing about what's currently inside it. </summary>
+		public virtual string ExtraHash => null;
+
+		/// <summary> Field name of this node's UnityEngine.Object reference meant to be edited on its own
+		/// (SubGraphNode's "SubGraph") - null for every other node. Drives a live "Open" button next to that field
+		/// in the graph editor (NodraNodeView) so jumping into it doesn't require hunting the asset down in the
+		/// Project window. A field name rather than the resolved reference itself so the button can track the same
+		/// SerializedProperty the field's own PropertyField is bound to, live-enabling the moment something's
+		/// actually assigned instead of needing this node's view rebuilt first. </summary>
+		public virtual string EditableAssetFieldName => null;
+
 		/// <summary> Entry point used by GeoGraph evaluation. The default forwards the first connected input (or
 		/// null, if none) to the single-input overload below - override this instead when a node needs more than
 		/// one input. </summary>

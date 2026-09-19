@@ -22,7 +22,9 @@ using UnityEngine;
 namespace Nodra
 {
 	/// <summary> Generates a flat, subdivided quad grid on the XZ plane, centered on the origin. Usually the
-	/// first node in a chain. </summary>
+	/// first node in a chain. Runs entirely in the NodraCore native library (see Native/NodraCore/
+	/// GridGenerator.cs) - there's no managed fallback, same as DecimateNode's optional package: without it,
+	/// Process() produces no geometry at all and Warning explains why. </summary>
 	[Serializable]
 	public class GridGeneratorNode : GeoNode
 	{
@@ -33,41 +35,15 @@ namespace Nodra
 
 		public override int InputCount => 0;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node produces no geometry.";
+
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();
 
-			var columns = Mathf.Max(1, Resolution.x);
-			var rows = Mathf.Max(1, Resolution.y);
-			// [Min] only constrains the Inspector - a negative Size mirrors one axis, which inverts this
-			// primitive's winding (same handedness argument as MirrorNode), so it's clamped again here too.
-			var size = Vector2.Max(Vector2.zero, Size);
-			var startIndex = data.PointCount;
-
-			for (var row = 0; row <= rows; row++)
-			{
-				for (var col = 0; col <= columns; col++)
-				{
-					var u = col / (float) columns;
-					var v = row / (float) rows;
-					var position = new Vector3((u - 0.5f) * size.x, 0f, (v - 0.5f) * size.y);
-
-					data.AddPoint(position, Vector3.up, new Vector2(u, v));
-				}
-			}
-
-			for (var row = 0; row < rows; row++)
-			{
-				for (var col = 0; col < columns; col++)
-				{
-					var i0 = startIndex + row * (columns + 1) + col;
-					var i1 = i0 + 1;
-					var i2 = i0 + columns + 1;
-					var i3 = i2 + 1;
-
-					data.AddPrimitive(i0, i2, i3, i1);
-				}
-			}
+			if (NodraNative.IsAvailable)
+				NodraNative.GridGenerator(data, Size, Resolution.x, Resolution.y);
 
 			return data;
 		}

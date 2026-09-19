@@ -94,7 +94,7 @@ namespace Nodra
 		}
 
 		// Every surviving triangle becomes its own 3-point primitive - the simplifier only ever outputs triangles,
-		// same as GeoCsg.ToGeoData does for its own BSP output.
+		// same as Native/NodraCore/GeoCsg.cs's own ToResult does for its BSP output.
 		static GeoData ToGeoData(MeshSimplifier simplifier)
 		{
 			var data = new GeoData();

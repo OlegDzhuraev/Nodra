@@ -24,7 +24,10 @@ namespace Nodra
 	/// <summary> Generates a UV sphere centered on the origin: latitude rings walked from pole to pole, each split
 	/// into longitude segments. Usually the first node in a chain, like the other generators. Each pole is a ring
 	/// of coincident points (needed for a clean UV seam), so every quad touching a pole fan-triangulates into one
-	/// real triangle plus one harmless zero-area one - the standard, simplest way to build a UV sphere. </summary>
+	/// real triangle plus one harmless zero-area one - the standard, simplest way to build a UV sphere. Runs
+	/// entirely in the NodraCore native library (see Native/NodraCore/SphereGenerator.cs) - there's no managed
+	/// fallback, same as DecimateNode's optional package: without it, Process() produces no geometry at all and
+	/// Warning explains why. </summary>
 	[Serializable]
 	public class SphereGeneratorNode : GeoNode
 	{
@@ -37,66 +40,15 @@ namespace Nodra
 
 		public override int InputCount => 0;
 
+		public override string Warning =>
+			NodraNative.IsAvailable ? null : "NodraCore native library isn't available - this node produces no geometry.";
+
 		public override GeoData Process(GeoData input)
 		{
 			var data = input ?? new GeoData();
 
-			var columns = Mathf.Max(3, Resolution.x);
-			var rows = Mathf.Max(2, Resolution.y);
-			// [Min] only constrains the Inspector - a negative Radius reflects every point through the origin,
-			// which (unlike a 2D point reflection) reverses this shape's winding, so it's re-clamped here too.
-			var radius = Mathf.Max(0f, Radius);
-			var startIndex = data.PointCount;
-
-			for (var row = 0; row <= rows; row++)
-			{
-				var v = row / (float) rows;
-				var theta = v * Mathf.PI;
-				var sinTheta = Mathf.Sin(theta);
-				var cosTheta = Mathf.Cos(theta);
-				var seamDirection = Vector3.zero;
-
-				for (var col = 0; col <= columns; col++)
-				{
-					var u = col / (float) columns;
-					Vector3 direction;
-
-					// col == columns closes the ring back onto col == 0 - reusing its exact direction instead of
-					// recomputing sin/cos(2*PI) (which drifts from sin/cos(0) by a float epsilon) keeps that seam's
-					// two vertex rows bit-for-bit identical in position, which Mesh.RecalculateNormals needs to
-					// weld them into one smooth normal instead of leaving a faceted seam down the sphere.
-					if (col == columns)
-					{
-						direction = seamDirection;
-					}
-					else
-					{
-						var phi = u * Mathf.PI * 2f;
-						direction = new Vector3(sinTheta * Mathf.Cos(phi), cosTheta, sinTheta * Mathf.Sin(phi));
-
-						if (col == 0)
-							seamDirection = direction;
-					}
-
-					data.AddPoint(direction * radius, direction, new Vector2(u, v));
-				}
-			}
-
-			for (var row = 0; row < rows; row++)
-			{
-				for (var col = 0; col < columns; col++)
-				{
-					var i0 = startIndex + row * (columns + 1) + col;
-					var i1 = i0 + 1;
-					var i2 = i0 + columns + 1;
-					var i3 = i2 + 1;
-
-					// Winding is deliberately (i0, i1, i3, i2) here, not GridGeneratorNode's (i0, i2, i3, i1) - the
-					// two parametrizations sweep their "row"/"column" tangents in opposite handedness relative to
-					// their outward normal, so the same index pattern would face this shape inward.
-					data.AddPrimitive(i0, i1, i3, i2);
-				}
-			}
+			if (NodraNative.IsAvailable)
+				NodraNative.SphereGenerator(data, Radius, Resolution.x, Resolution.y);
 
 			return data;
 		}
