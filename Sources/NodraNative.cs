@@ -33,7 +33,7 @@ namespace Nodra
 	/// the native side's own unsafe, pointer-typed mirror structs (Native/NodraCore/NativeExports.cs). </summary>
 	public static class NodraNative
 	{
-		const string Library = "NodraCore";
+		const string Library = "Nodra.Core";
 
 		[DllImport(Library, EntryPoint = "nodra_core_ping")]
 		static extern int Ping_Native(int value);
